@@ -1,0 +1,1 @@
+/home/amazingefren/.zsh
