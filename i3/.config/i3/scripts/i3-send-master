@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+
+from i3ipc.aio import Connection
+import asyncio
+
+
+# FUNC:   swap_master()
+# ARGS:   (bar: i3ipc::Workspace, baz: i3ipc::Focused, biz: i3ipc::Connection)
+# RETURN: Command:str
+# LOGIC:  Biggest by total area in px (Width*Height)
+# NOTE:   Conflicting masters will be decided by order
+# FUTURE: Sending Trigger to => _NET_WM_STATE_DEMANDS_ATTENTION
+#             to avoid overriding user preferences
+async def swap_master(ws, focused, i3):
+    master = {
+            "con_id": focused.ipc_data['id'] or 0,
+            "size": focused.rect.height * focused.rect.width or 0,
+    }
+    for con in ws:
+        if con.name is not None and con.ipc_data['id'] is not master['con_id']:
+            size = con.rect.height*con.rect.width
+            if size > master["size"]:
+                master["con_id"] = con.ipc_data['id']
+                master["size"] = size
+
+    cmd = 'swap container with con_id {}' \
+        .format(str(master['con_id']))
+    await i3.command(cmd)
+    # Some apps (spotify *cough) are stealing focus after swap
+    # time is optional
+    # + import time + time.sleep(0.35)
+    await i3.command('[id={} focus]', str(focused.ipc_data['id']))
+    return 0
+
+
+async def main():
+    i3 = await Connection().connect()
+    tree = await i3.get_tree()
+    focused = tree.find_focused()
+    await swap_master(focused.workspace(), focused, i3)
+    exit(0)
+loop = asyncio.get_event_loop()
+loop.run_until_complete(main())
+loop.close()

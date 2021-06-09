@@ -1,0 +1,234 @@
+set $mod Mod4
+set $left h
+set $down j
+set $up k
+set $right l
+set $term alacritty
+set $menu "rofi -combi-modi 'window,drun,run' -show combi -modi combi -lines 10 -hide-scrollbar"
+
+### Autostart ##########################
+exec_always --no-startup-id picom -b --experimental-backends &
+exec_always --no-startup-id pulseeffects --gapplication-service &
+exec_always --no-startup-id nitrogen --restore &
+exec_always --no-startup-id $HOME/.config/polybar/launch.sh
+exec_always --no-startup-id spotifyd &
+
+### System #############################
+
+# Mouse Tiling
+floating_modifier $mod
+
+# Reload Config
+bindsym $mod+Shift+r restart
+
+### Launch #############################
+
+# Terminal
+bindsym $mod+Return         exec --no-startup-id $HOME/.config/i3/scripts/i3-send-master
+
+# Browser
+bindsym $mod+Shift+Return   exec --no-startup-id $term
+
+# Launcher
+bindsym $mod+d              exec --no-startup-id $menu
+
+### Client #############################
+
+# Focus
+bindsym $mod+$left          focus left
+bindsym $mod+$down          focus down
+bindsym $mod+$up            focus up
+bindsym $mod+$right         focus right
+
+# Move
+bindsym $mod+Shift+$left    move left
+bindsym $mod+Shift+$down    move down
+bindsym $mod+Shift+$up      move up
+bindsym $mod+Shift+$right   move right
+
+# Kill
+bindsym $mod+Shift+c kill
+
+### Workspaces #########################
+set $ws1 "1:I"
+set $ws2 "2:II"
+set $ws3 "3:III"
+set $ws4 "4:IV"
+set $ws5 "5:V"
+set $ws6 "6:VI"
+set $ws7 "7:VII"
+set $ws8 "8:VIII"
+set $ws9 "9:IX"
+set $ws0 "10:X"
+
+# Monitor Configuration
+set $main DisplayPort-0
+set $secondary DisplayPort-1
+
+# Workspace Keybind
+bindsym $mod+1 workspace $ws1
+bindsym $mod+2 workspace $ws2
+bindsym $mod+3 workspace $ws3
+bindsym $mod+4 workspace $ws4
+bindsym $mod+5 workspace $ws5
+bindsym $mod+6 workspace $ws6
+bindsym $mod+7 workspace $ws7
+bindsym $mod+8 workspace $ws8
+bindsym $mod+9 workspace $ws9
+bindsym $mod+0 workspace $ws0
+
+# Monitor Assignments
+workspace $ws1 output $main
+workspace $ws2 output $main
+workspace $ws3 output $main
+workspace $ws4 output $main
+workspace $ws5 output $main
+workspace $ws6 output $main
+workspace $ws7 output $main
+workspace $ws8 output $main
+workspace $ws9 output $secondary
+workspace $ws0 output $secondary
+
+# Move Window to Workspace
+bindsym $mod+Shift+1 move container to workspace $ws1
+bindsym $mod+Shift+2 move container to workspace $ws2
+bindsym $mod+Shift+3 move container to workspace $ws3
+bindsym $mod+Shift+4 move container to workspace $ws4
+bindsym $mod+Shift+5 move container to workspace $ws5
+bindsym $mod+Shift+6 move container to workspace $ws6
+bindsym $mod+Shift+7 move container to workspace $ws7
+bindsym $mod+Shift+8 move container to workspace $ws8
+bindsym $mod+Shift+9 move container to workspace $ws9
+bindsym $mod+Shift+0 move container to workspace $ws0
+
+### Layout #############################
+
+# Toggle Split
+bindsym $mod+q split toggle
+
+# Switch Layout for Focused Workspace
+bindsym $mod+s layout stacking
+bindsym $mod+w layout tabbed
+bindsym $mod+e layout toggle split
+
+# Fullscreen
+bindsym $mod+f fullscreen
+
+# Toggle Floating Application
+bindsym $mod+Shift+space floating toggle
+
+# Toggle Between Floating and Tiled Applications
+bindsym $mod+space focus mode_toggle
+
+# Focus Parent
+bindsym $mod+a focus parent mode_toggle
+
+# Focus Child
+bindsym $mod+c focus child
+
+### Scratchpad #########################
+
+# Move to Scratchpad
+bindsym $mod+Shift+minus move scratchpad
+
+# Show/Cycle Scrathpad
+bindsym $mod+minus scratchpad show
+
+### Modes ##############################
+
+##### Resize Mode ######
+set $Resize Resize: (h): -Width, (j): +Height, (k): -Height, (l): +Width
+mode "$Resize" {
+    bindsym $left   resize shrink width 10px or 1ppt
+    bindsym $down   resize grow height 10px or 1ppt
+    bindsym $up     resize shrink height 10px or 1ppt
+    bindsym $right  resize grow width 10px or 1ppt
+    bindsym Return  mode "default"
+    bindsym Escape  mode "default"
+}
+
+##### Power Mode #####
+set $Power-System  Power: S-Shutdown, R-Restart, L-Lock, E-Exit, Q-Suspend
+mode "$Power-System" {
+    bindsym q exec --no-startup-id systemctl suspend,       mode "default"
+    bindsym r exec --no-startup-id systemctl reboot,        mode "default"
+    bindsym s exec --no-startup-id systemctl poweroff -i,   mode "default"
+    bindsym l exec --no-startup-id $lock, 				    mode "default"
+    bindsym Return  mode "default"
+    bindsym Escape  mode "default"
+}
+
+##### Gaps Change Mode #####
+set $mode_gaps Gaps: (o) outer, (i) inner
+set $mode_gaps_outer Outer Gaps: +|-|0 (local), Shift + +|-|0 (global)
+set $mode_gaps_inner Inner Gaps: +|-|0 (local), Shift + +|-|0 (global)
+mode "$mode_gaps" {
+    bindsym o      mode "$mode_gaps_outer"
+    bindsym i      mode "$mode_gaps_inner"
+    bindsym Return mode "default"
+    bindsym Escape mode "default"
+}
+mode "$mode_gaps_inner" {
+    bindsym equal       gaps inner current plus 5
+    bindsym minus       gaps inner current minus 5
+    bindsym 0           gaps inner current set 0
+    bindsym Shift+plus  gaps inner all plus 5
+    bindsym Shift+minus gaps inner all minus 5
+    bindsym Shift+0     gaps inner all set 0
+    bindsym Return mode "default"
+    bindsym Escape mode "default"
+}
+mode "$mode_gaps_outer" {
+    bindsym equal       gaps outer current plus 5
+    bindsym minus       gaps outer current minus 5
+    bindsym 0           gaps outer current set 0
+    bindsym Shift+plus  gaps outer all plus 5
+    bindsym Shift+minus gaps outer all minus 5
+    bindsym Shift+0     gaps outer all set 0
+    bindsym Return mode "default"
+    bindsym Escape mode "default"
+}
+
+
+## Enter Modes
+bindsym $mod+r          mode "$Resize"
+bindsym $mod+Shift+q          mode "$Power-System"
+bindsym $mod+Shift+g    mode "$mode_gaps"
+
+### Customziation ######################
+# Gaps
+gaps inner 8
+
+# Theme -> TODO: Bugsterish
+client.focused          #5BC0DC #526984 #E5DED7 #5BC0DC   #5BC0DC
+client.focused_inactive #161C23 #161C23 #C7B8AE #161C23   #161C23
+client.unfocused        #232E38 #232E38 #C7B8AE #232E38   #232E38
+client.urgent           #161C23 #DC5B80 #161C23 #DC5B80   #DC5B80
+client.placeholder      #161C23 #161C23 #C7B8AE #161C23   #161C23
+client.background       #C7B8AE
+
+
+# class                 border  bground text    indicator child_border
+# client.focused          #6272A4 #6272A4 #F8F8F2 #6272A4   #6272A4
+# client.focused_inactive #44475A #44475A #F8F8F2 #44475A   #44475A
+# client.unfocused        #282A36 #282A36 #BFBFBF #282A36   #282A36
+# client.urgent           #44475A #FF5555 #F8F8F2 #FF5555   #FF5555
+# client.placeholder      #282A36 #282A36 #F8F8F2 #282A36   #282A36
+# 
+# client.background       #F8F8F2
+
+
+font pango:IBM Plex Sans Condensed Bold 9 
+# default_border pixel 2
+for_window [class=".*"] border pixel 2
+hide_edge_borders smart
+
+for_window [window_role="bubble"] floating enable 
+for_window [window_role="task_dialog"] floating enable
+for_window [window_role="Preferences"] floating enable
+for_window [window_type="dialog"] floating enable 
+for_window [window_type="menu"] floating enable
+for_window [class="steam_app_*"] floating disable
+for_window [class="steam_app_*"] border none
+assign [class="steam_app_*"] $ws6
+assign [class="Steam"] $ws5
