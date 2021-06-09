@@ -1,0 +1,59 @@
+env:
+  TERM: alacritty
+
+window:
+  padding:
+    x: 2
+    y: 2
+    dynamic_padding: true
+
+Scrolling:
+  history: 10000
+  multiplier: 5
+
+font:
+  normal:
+    # family: "Droid Sans Mono Nerd Font Mono"
+    family: "SFMono Nerd Font Mono"
+  bold:
+    family: "SFMono Nerd Font Mono"
+    style: Bold
+  italic:
+    family: "SFMono Nerd Font Mono"
+    style: Italic
+  bold_italic:
+    family: "SFMono Nerd Font Mono"
+    style: Bold Italic
+  size: 9.0
+draw_bold_text_with_bright_colors: true
+
+key_bindings: 
+  - {key: Back, mods: Control, chars: "\x17"}
+
+colors:
+  # Default colors
+  primary:
+    background: '#161C23'
+    foreground: '#C7B8AE'
+
+  # Normal colors
+  normal:
+    black:   '#313F4E'
+    red:     '#F34473'
+    green:   '#6BE156'
+    yellow:  '#EBCF47'
+    blue:    '#5BC0DC'
+    magenta: '#C560E6'
+    cyan:    '#2DD2A3'
+    white:   '#E5DED7'
+
+  # Bright colors
+  bright:
+    black:   '#415368'
+    red:     '#DC5B80'
+    green:   '#83E85E'
+    yellow:  '#F2A145'
+    blue:    '#5BDCD8'
+    magenta: '#DC5BC0'
+    cyan:    '#5BDCB8'
+    white:   '#FFFFFF'
