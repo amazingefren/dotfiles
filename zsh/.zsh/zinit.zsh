@@ -11,7 +11,8 @@ autoload -Uz _zinit
 zinit wait lucid for \
     mafredri/zsh-async \
     seletskiy/zsh-fuzzy-search-and-edit
-bindkey '^P' fuzzy-search-and-edit
+# bindkey '^M' fuzzy-search-and-edit
+alias fz=fuzzy-search-and-edit
 
 # Completion
 zinit wait lucid for \
