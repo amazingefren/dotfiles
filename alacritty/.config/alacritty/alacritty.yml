@@ -7,6 +7,8 @@ window:
     y: 2
     dynamic_padding: true
 
+# background_opacity: 0.98
+
 Scrolling:
   history: 10000
   multiplier: 5
