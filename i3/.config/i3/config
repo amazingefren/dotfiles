@@ -221,6 +221,7 @@ client.background       #C7B8AE
 font pango:IBM Plex Sans Condensed Bold 9 
 # default_border pixel 2
 for_window [class=".*"] border pixel 2
+# for_window [class=".*"] floating enable
 hide_edge_borders smart
 
 for_window [window_role="bubble"] floating enable 
@@ -228,7 +229,7 @@ for_window [window_role="task_dialog"] floating enable
 for_window [window_role="Preferences"] floating enable
 for_window [window_type="dialog"] floating enable 
 for_window [window_type="menu"] floating enable
-for_window [class="steam_app_*"] floating disable
+for_window [class="steam_app_*"] floating enable
 for_window [class="steam_app_*"] border none
-# assign [class="steam_app_*"] $ws6
+for_window [instance="^origin.exe$" class="Wine"] floating enable, fullscreen disable
 assign [class="Steam"] $ws5
