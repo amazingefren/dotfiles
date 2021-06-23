@@ -2,7 +2,8 @@
 background = #161C23
 background-alt = #313F4E 
 foreground = #E5DED7
-foreground-alt = #627D9D
+; foreground-alt = #627D9D
+foreground-alt = #F34473
 primary = #5BDCD8
 secondary = #F2a145
 alert = #ED5E84
@@ -30,12 +31,13 @@ module-margin-right = 2
 
 font-0 = "Noto Sans Nerd Font:size=10:antialias=true;2"
 font-1 = fixed:pixelsize=10;1
+font-2 = IBM Plex Sans:size=10:antialias=true:weight=bold;2
 ; font-1 = unifont:fontformat=truetype:size=8:antialias=false;0
 ; font-2 = siji:pixelsize=10;1
 
 modules-left = news
 modules-center = i3 
-modules-right = AMC GME CRSR filesystem pulseaudio memory cpu temperature date
+modules-right = AMC GME CRSR filesystem pulseaudio memory cpu temperature date time
 
 tray-position = right
 tray-padding = 2
@@ -57,18 +59,21 @@ type = custom/script
 exec = /home/amazingefren/.config/polybar/scripts/stocks --customticker AMC
 format-prefix = "AMC "
 format-prefix-foreground = ${colors.foreground-alt}
+format-prefix-font = 3 
 
 [module/GME]
 type = custom/script
 exec = /home/amazingefren/.config/polybar/scripts/stocks --customticker GME
 format-prefix = "GME "
 format-prefix-foreground = ${colors.foreground-alt}
+format-prefix-font = 3 
 
 [module/CRSR]
 type = custom/script
 exec = /home/amazingefren/.config/polybar/scripts/stocks --customticker CRSR
 format-prefix = "CRSR "
 format-prefix-foreground = ${colors.foreground-alt}
+format-prefix-font = 3 
 
 ; [module/speedtest]
 ; type = custom/script
@@ -92,6 +97,7 @@ format-mounted = <label-mounted>
 label-mounted = " %percentage_used%%"
 format-mounted-prefix = "NVME"
 format-mounted-prefix-foreground = ${colors.foreground-alt}
+format-mounted-prefix-font = 3 
 ; label-unmounted = %mountpoint% not mounted
 ; label-unmounted-foreground = ${colors.foreground-alt}
 
@@ -135,6 +141,7 @@ type = internal/cpu
 interval = 2
 format-prefix = "CPU "
 format-prefix-foreground = ${colors.foreground-alt}
+format-prefix-font = 3 
 format-underline = #f90000
 label = %percentage:2%%
 
@@ -143,14 +150,29 @@ type = internal/memory
 interval = 2
 format-prefix = "RAM "
 format-prefix-foreground = ${colors.foreground-alt}
+format-prefix-font = 3 
 format-underline = #4bffdc
 label = %percentage_used%%
+
+[module/time]
+type = internal/date
+interval = 5
+
+time = %I:%M %p
+time-alt = %H:%M:%S
+
+format-prefix = "TIME "
+format-prefix-foreground = ${colors.foreground-alt}
+format-prefix-font = 3 
+format-underline = #0a6cf5
+
+label = %time%
 
 [module/date]
 type = internal/date
 interval = 5
 
-date = %m-%d
+date = %a %m-%d
 date-alt = " %Y-%m-%d"
 
 time = %I:%M %p
@@ -158,9 +180,10 @@ time-alt = %H:%M:%S
 
 format-prefix = "DATE "
 format-prefix-foreground = ${colors.foreground-alt}
+format-prefix-font = 3 
 format-underline = #0a6cf5
 
-label = %date% %time%
+label = %date%
 
 [module/pulseaudio]
 type = internal/pulseaudio
@@ -170,6 +193,7 @@ label-volume = %percentage%%
 label-volume-foreground = ${root.foreground}
 format-volume-prefix = "VOLUME "
 format-volume-prefix-foreground = ${colors.foreground-alt}
+format-volume-prefix-font = 3 
 
 label-muted = 🔇 muted
 label-muted-foreground = #666
@@ -186,6 +210,7 @@ format-warn = <label-warn>
 format-warn-underline = ${self.format-underline}
 format-prefix = "TEMPERATURE "
 format-prefix-foreground = ${colors.foreground-alt}
+format-prefix-font = 3 
 
 label = %temperature-c%
 label-warn = %temperature-c%

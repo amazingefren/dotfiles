@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+
+import requests
+import os.path
+from datetime import datetime, timedelta
+
+api_key = ""
+
+# find sources & country codes at https://newsapi.org/sources
+save_path = '/home/amazingefren/.config/polybar/scripts/savednews/'
+
+# sources = "CNN"
+country = "us"
+
+
+def fetch_time():
+    now = datetime.now()
+    return str(now + (datetime.min - now) % timedelta(minutes=20))
+
+
+def time_check():
+    path = os.path.join(save_path, "current_url.txt")
+    f = open(path, "r")
+    read_time = f.read()
+    return read_time.split('\n')[1:][0]
+
+
+def check_limit(err=False):
+    if err:
+        # print("hit error point")
+        source_file = os.path.join(save_path, "current_url.txt")
+        f = open(source_file, "r")
+        print(f.read().split('\n')[0:1][0])
+        exit(0)
+    if fetch_time() == time_check():
+        # print("time is same")
+        return False
+    else:
+        return True
+
+
+def process_data():
+    return 0
+
+
+try:
+    if check_limit():
+        data = requests.get('https://newsapi.org/v2/top-headlines?apiKey='
+                            # + '&country=' + country).json()
+                    + api_key + '&country=' + country).json()
+        if data['status'] == 'error':
+            check_limit(True)
+        else:
+            sourceName = data['articles'][0]['source']['name']
+            title = data['articles'][0]['title']
+            url = data['articles'][0]['url']
+            print(sourceName+': '+title)
+            path = os.path.join(save_path, "current_url.txt")
+            f = open(path, "w")
+            f.write(url+'\n'+fetch_time())
+            f.close()
+    else:
+        # print("else ran")
+        check_limit(True)
+except requests.exceptions.RequestException as e:
+    if e:
+        print('Something went wrong!')
