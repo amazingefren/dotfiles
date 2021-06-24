@@ -2,11 +2,13 @@
 background = #161C23
 background-alt = #313F4E 
 foreground = #E5DED7
-; foreground-alt = #627D9D
-foreground-alt = #F34473
+foreground-alt = #5BC0DC
+foreground-dark = "#627D9D"
+; foreground-alt = #F34473
 primary = #5BDCD8
-secondary = #F2a145
+secondary = #F2A145
 alert = #ED5E84
+teal = #2DD2A3
 
 [bar/main]
 monitor = ${env:MONITOR:DisplayPort-1}
@@ -25,13 +27,13 @@ foreground = ${colors.foreground}
 padding-left = 4 
 padding-right = 2
 
-module-margin-left = 2
-module-margin-right = 2
+module-margin-left = 1
+module-margin-right = 1 
 
 
-font-0 = "Noto Sans Nerd Font:size=10:antialias=true;2"
+font-0 = Noto Sans Nerd Font:size=10.5:antialias=true;2
 font-1 = fixed:pixelsize=10;1
-font-2 = IBM Plex Sans:size=10:antialias=true:weight=bold;2
+font-2 = IBM Plex Sans:size=10.5:antialias=true;2
 ; font-1 = unifont:fontformat=truetype:size=8:antialias=false;0
 ; font-2 = siji:pixelsize=10;1
 
@@ -53,6 +55,7 @@ type= custom/script
 exec = /home/amazingefren/.config/polybar/scripts/news
 interval = 30
 click-left = < ~/.config/polybar/scripts/savednews/current_url.txt xargs -I % xdg-open %
+format-foreground = ${colors.foreground}
 
 [module/AMC]
 type = custom/script
@@ -116,10 +119,12 @@ label-mode-background = ${colors.primary}
 label-focused = %name%
 label-focused-background = ${colors.background-alt}
 label-focused-underline= ${colors.primary}
+label-focused-foreground= ${colors.foreground}
 label-focused-padding = 2
 
 ; unfocused = Inactive workspace on any monitor
 label-unfocused = %name%
+; label-unfocused-foreground = ${colors.foreground-dark}
 label-unfocused-padding = 2
 
 ; visible = Active workspace on unfocused monitor
@@ -127,6 +132,7 @@ label-visible = %name%
 label-visible-background = ${self.label-focused-background}
 label-visible-underline = ${self.label-focused-underline}
 label-visible-padding = ${self.label-focused-padding}
+label-visible-foreground = ${self.label-focused-foreground}
 
 ; urgent = Workspace with urgency hint set
 label-urgent = %name%
