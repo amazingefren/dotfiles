@@ -16,15 +16,15 @@ Scrolling:
 font:
   normal:
     # family: "Droid Sans Mono Nerd Font Mono"
-    family: "SFMono Nerd Font Mono"
+    family: "Hack Nerd Font Mono"
   bold:
-    family: "SFMono Nerd Font Mono"
+    family: "Hack Nerd Font Mono"
     style: Bold
   italic:
-    family: "SFMono Nerd Font Mono"
+    family: "Hack Nerd Font Mono"
     style: Italic
   bold_italic:
-    family: "SFMono Nerd Font Mono"
+    family: "Hack Nerd Font Mono"
     style: Bold Italic
   size: 9.0
 draw_bold_text_with_bright_colors: true
