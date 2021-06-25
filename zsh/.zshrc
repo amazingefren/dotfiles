@@ -19,3 +19,8 @@ export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || pr
 if [ -z "${DISPLAY}" ] && [ "$(tty)" = "/dev/tty1" ]; then
     exec startx
 fi
+
+# ITS TEMPORARY OK
+if [ -f ~/.last_pwd ]; then
+    cd `cat ~/.last_pwd`
+fi 

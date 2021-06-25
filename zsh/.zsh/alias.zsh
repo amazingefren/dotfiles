@@ -10,10 +10,11 @@ cd(){
     else
         pushd ~ &>/dev/null
     fi
+    pwd > ~/.last_pwd
 }
 
 
-alias cat="bat -p"
+# alias cat="bat -p"
 alias find="fd -H"
 alias du="dust"
 alias fuck=b
