@@ -18,5 +18,5 @@ ZSH_THEME_GIT_PROMPT_CLEAN="$YS_VCS_PROMPT_CLEAN"
 
 precmd() { print "" }
 # Luke Smith + Git
-PS1="%B%{$fg[red]%}[%{$fg[yellow]%}%n%{$fg[green]%}@%{$fg[blue]%}%M %{$fg[magenta]%}%(4~|%-1~/…/%2~|%3~)%{${git_info}%}%{$fg[red]%}]%{$reset_color%} 
+PS1="%{$fg[red]%}[%{$fg[yellow]%}%n%{$fg[green]%}@%{$fg[blue]%}%M %{$fg[magenta]%}%(4~|%-1~/…/%2~|%3~)%{${git_info}%}%{$fg[red]%}]%{$reset_color%} 
 $ "
