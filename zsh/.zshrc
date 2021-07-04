@@ -5,7 +5,6 @@ source "$HOME/.zsh/prompt.zsh"
 
 autoload -Uz compinit 
 compinit
-# zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z} l:|=* r:|?=**'
 zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' 'r:|=*' 'l:|=* r:|=*'
 setopt menu_complete
 setopt nocaseglob
@@ -24,3 +23,5 @@ fi
 if [ -f ~/.last_pwd ]; then
     cd `cat ~/.last_pwd`
 fi 
+
+export PATH=$PATH:$HOME/go/bin

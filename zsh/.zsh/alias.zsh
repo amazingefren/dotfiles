@@ -24,10 +24,6 @@ alias temps='watch -n.5 "grep \"^[c]pu MHz\" /proc/cpuinfo; echo && sensors k10t
 alias um='sudo reflector --verbose --country US --latest 5 --protocol https --sort rate --save /etc/pacman.d/mirrorlist'
 # alias pn='pnpm'
 
-# IMPORTANT! REMOVE ON ZEN -> 5.12.14
-alias yay='echo "DO NOT UPDATE LINUX KERNEL 5.12.13, SEE: https://gitlab.freedesktop.org/drm/amd/-/issues/1632"'
-alias pacman='echo "DO NOT UPDATE LINUX KERNEL 5.12.13, SEE: https://gitlab.freedesktop.org/drm/amd/-/issues/1632"'
-
 # n ()
 # {
 #     export EDITOR=nvim
