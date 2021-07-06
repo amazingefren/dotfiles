@@ -15,9 +15,9 @@ export VISUAL=/usr/bin/nvim
 export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" # This loads nvm
 
-if [ -z "${DISPLAY}" ] && [ "$(tty)" = "/dev/tty1" ]; then
-    exec startx
-fi
+q () {
+  exit
+}
 
 # ITS TEMPORARY OK
 if [ -f ~/.last_pwd ]; then
@@ -25,3 +25,8 @@ if [ -f ~/.last_pwd ]; then
 fi 
 
 export PATH=$PATH:$HOME/go/bin
+
+if [ -z "${DISPLAY}" ] && [ "$(tty)" = "/dev/tty1" ]; then
+    exec startx
+fi
+
