@@ -59,21 +59,21 @@ format-foreground = ${colors.foreground}
 
 [module/AMC]
 type = custom/script
-exec = /home/amazingefren/.config/polybar/scripts/stocks --customticker AMC
+exec = /home/amazingefren/.config/polybar/scripts/stocks2 --customticker AMC
 format-prefix = "AMC "
 format-prefix-foreground = ${colors.foreground-alt}
 format-prefix-font = 3 
 
 [module/GME]
 type = custom/script
-exec = /home/amazingefren/.config/polybar/scripts/stocks --customticker GME
+exec = /home/amazingefren/.config/polybar/scripts/stocks2 --customticker GME
 format-prefix = "GME "
 format-prefix-foreground = ${colors.foreground-alt}
 format-prefix-font = 3 
 
 [module/CRSR]
 type = custom/script
-exec = /home/amazingefren/.config/polybar/scripts/stocks --customticker CRSR
+exec = /home/amazingefren/.config/polybar/scripts/stocks2 --customticker CRSR
 format-prefix = "CRSR "
 format-prefix-foreground = ${colors.foreground-alt}
 format-prefix-font = 3 

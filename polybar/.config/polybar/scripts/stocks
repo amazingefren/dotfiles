@@ -44,8 +44,8 @@ def customticker(ticker):
     """Returns: stock price and ticker of a stock with format 'TICKER': 'PRICE'.
     Parameter: the ticker to get a stock price on and to display.
     Precondition: ticker is a string."""
-
     tickerPrice = si.get_live_price(ticker)
+    print(tickerPrice)
     output = '$' + str(round(tickerPrice, roundNumber))
     return output
 
