@@ -4,7 +4,7 @@ set $down j
 set $up k
 set $right l
 set $term alacritty
-set $menu "rofi -combi-modi 'window,drun,run' -show combi -modi combi -lines 10 -hide-scrollbar"
+set $menu "rofi -combi-modi 'drun,window,run' -show combi -modi combi -lines 10 -hide-scrollbar"
 
 ### Autostart ##########################
 exec_always --no-startup-id picom -b --experimental-backends &
