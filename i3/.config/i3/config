@@ -13,6 +13,8 @@ exec_always --no-startup-id nitrogen --restore &
 exec_always --no-startup-id $HOME/.config/polybar/launch.sh
 exec_always --no-startup-id spotifyd &
 
+exec_always --no-startup-id setxkbmap -option caps:ctrl_modifier &
+
 ### System #############################
 
 # Mouse Tiling
