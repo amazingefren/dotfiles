@@ -199,15 +199,16 @@ bindsym $mod+Shift+g    mode "$mode_gaps"
 
 ### Customziation ######################
 # Gaps
-gaps inner 8
+# gaps inner 8
+# gaps left 5
 
 # Theme -> TODO: Bugsterish
-client.focused          #5BC0DC #526984 #E5DED7 #5BC0DC   #5BC0DC
-client.focused_inactive #161C23 #161C23 #C7B8AE #161C23   #161C23
-client.unfocused        #232E38 #232E38 #C7B8AE #232E38   #232E38
-client.urgent           #161C23 #DC5B80 #161C23 #DC5B80   #DC5B80
-client.placeholder      #161C23 #161C23 #C7B8AE #161C23   #161C23
-client.background       #C7B8AE
+client.focused          #88D279 #35363B #DBD6BD #88D279   #88D279
+client.focused_inactive #111213 #111213 #DBD6BD #111213   #111213
+client.unfocused        #111213 #111213 #DBD6BD #111213   #111213
+client.urgent           #131415 #D27979 #161C23 #D27979   #D27979
+client.placeholder      #131415 #131415 #DBD6BD #131415   #131415
+client.background       #DBD6BD
 
 
 # class                 border  bground text    indicator child_border
@@ -233,6 +234,7 @@ for_window [window_type="dialog"] floating enable
 for_window [window_type="menu"] floating enable
 for_window [class="steam_app_*"] floating enable
 for_window [class="steam_app_*"] border none
+no_focus [class="steam_app_*"]
 # for_window [instance="^origin.exe$" class="Wine"] floating enable, fullscreen disable
 for_window [instance="origin.exe"] floating enable
 assign [class="Steam"] $ws5
