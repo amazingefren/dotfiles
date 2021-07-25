@@ -1,0 +1,101 @@
+:root {    
+    --bg: #121314;
+    --bg_alt: #27272B;
+    --fg: #C2BDA3;
+    --fg_alt: #DBD6BD;
+    --blue: #79C4D2;
+    --light_blue: #79D2A6;
+    --base5: #35363B;
+    --red: #D27979;
+    --orange: #D29E79;
+
+    --tridactyl-fg: var(--fg);
+    --tridactyl-bg: var(--bg);
+    --tridactyl-url-fg: var(--light_blue);
+    --tridactyl-url-bg: var(--bg);
+    --tridactyl-highlight-box-bg: var(--base5);
+    --tridactyl-highlight-box-fg: var(--bg);
+
+    --tridactyl-hintspan-fg: var(--bg) !important;
+    --tridactyl-hintspan-bg: var(--red) !important;
+
+    --tridactyl-hint-active-fg: none;
+    --tridactyl-hint-active-bg: none;
+    --tridactyl-hint-active-outline: none;
+    --tridactyl-hint-bg: none; 
+    --tridactyl-hint-fg: none; 
+    --tridactyl-hint-outline: none;
+
+}
+
+#command-line-holder {    
+    color: var(--tridactyl-bg);
+}
+
+#tridactyl-input {    
+    color: var(--tridactyl-fg);
+    width: 100%;
+    font-size: 1rem;
+    line-height: 1.5;
+    background: var(--tridactyl-bg);
+    border-top: 1px solid var(--bg_alt);
+    padding: 0.4rem 1.4rem 0.4rem 1.4rem;
+}
+
+#completions > div > table {    
+    font-size: 0.8rem;
+    color: var(--fg_alt);
+    border-spacing: 0;
+    table-layout: fixed;
+    padding: 1rem;
+    padding-bottom: 0;
+}
+
+#completions > div {    
+    max-height: calc(15 * 1.50em);
+    min-height: 1.50em;
+}
+
+#completions {    
+    color: var(--tridactyl-fg);
+    background: var(--tridactyl-bg);
+    border-top: 2px solid var(--orange);
+}
+
+#completions .sectionHeader {    
+    background: unset;
+    padding-left: 0.5rem;
+}
+
+#cmdline_iframe {    
+    position: fixed !important;
+    left: 10% !important;
+    z-index: 2147483647 !important;
+    width: 85% !important;
+    box-shadow: rgba(0, 0, 0, 0.5) 0px 0px 20px !important;
+}
+
+@media only screen and (max-width: 1500px){
+    #cmdline_iframe {
+        width: 100% !important;
+        left: 0 !important;
+        right: 0 !important;
+    }
+}
+
+.TridactylStatusIndicator {    
+    position: fixed !important;
+    background: var(--tridactyl-bg) !important;
+    border: 1px var(--bg_alt) solid !important;
+    padding: 0.8ex !important;
+}
+
+#completions .focused {
+    background: var(--blue);
+    color: var(--bg);
+}
+
+#completions .focused .url {    
+    background: var(--bg_alt);
+    color: var(--fg);
+}
