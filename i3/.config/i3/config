@@ -12,6 +12,7 @@ exec_always --no-startup-id easyeffects --gapplication-service &
 exec_always --no-startup-id nitrogen --restore &
 exec_always --no-startup-id $HOME/.config/polybar/launch.sh
 exec_always --no-startup-id spotifyd &
+exec_always --no-startup-id xset r rate 325 55 &
 
 exec_always --no-startup-id setxkbmap -option ctrl:nocaps &
 
