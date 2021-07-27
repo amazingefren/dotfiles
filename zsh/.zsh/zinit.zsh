@@ -42,4 +42,4 @@ zinit wait lucid for \
 # PR: zinit #268
 # CLAIMS: https://www.reddit.com/r/zsh/comments/ix98cv/new_znap_plugin_manager_features_instant_prompt/g6e3ep7/
 # WORTH: a shot
-zinit wait for marlonrichert/zsh-autocomplete
+zinit wait lucid for marlonrichert/zsh-autocomplete
