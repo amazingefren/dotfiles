@@ -26,7 +26,7 @@ q () {
   # zinit unload jeffreytse/zsh-vi-mode
   # bindkey -e
 # else
-  zinit light  jeffreytse/zsh-vi-mode
+zinit light  jeffreytse/zsh-vi-mode
 # fi
 
 # ITS TEMPORARY OK
