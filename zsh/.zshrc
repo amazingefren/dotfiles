@@ -19,6 +19,16 @@ q () {
   exit
 }
 
+# bindkey -e not changing from bindkey -v 
+# i'm guessing either (EDITOR) or the plugin is causing bindkey -v to stick
+# local check=$(env | grep "VIMRUNTIME" &>/dev/null)
+# if [ ! -z "$check" ]; then
+  # zinit unload jeffreytse/zsh-vi-mode
+  # bindkey -e
+# else
+  zinit light  jeffreytse/zsh-vi-mode
+# fi
+
 # ITS TEMPORARY OK
 if [ -f ~/.last_pwd ]; then
     cd `cat ~/.last_pwd`

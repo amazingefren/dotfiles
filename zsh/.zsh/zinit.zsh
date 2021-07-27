@@ -30,5 +30,3 @@ zinit wait lucid for \
 export ZSH_AUTOSUGGEST_USE_ASYNC=1
 export ZSH_AUTOSUGGEST_MANUAL_REBIND=1
 
-# Better vi
-zinit light  jeffreytse/zsh-vi-mode
