@@ -43,3 +43,5 @@ zinit wait lucid for \
 # CLAIMS: https://www.reddit.com/r/zsh/comments/ix98cv/new_znap_plugin_manager_features_instant_prompt/g6e3ep7/
 # WORTH: a shot
 zinit wait lucid for marlonrichert/zsh-autocomplete
+zstyle ':autocomplete:tab:*' accept-autosuggestions no
+zstyle ':autocomplete:tab:*' widget-style menu-select

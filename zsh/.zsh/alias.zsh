@@ -4,6 +4,17 @@ alias lst="ls -T --level 2"
 
 b(){ popd &>/dev/null }
 
+cdl(){
+    if [ "$1" != "" ];then
+        pushd $* &>/dev/null
+        ls
+    else
+        pushd ~ &>/dev/null
+        ls
+    fi
+    pwd > ~/.last_pwd
+}
+
 cd(){
     if [ "$1" != "" ];then
         pushd $* &>/dev/null
