@@ -30,3 +30,5 @@ zinit wait lucid for \
 export ZSH_AUTOSUGGEST_USE_ASYNC=1
 export ZSH_AUTOSUGGEST_MANUAL_REBIND=1
 
+zinit wait lucid for \
+  mfaerevaag/wd
