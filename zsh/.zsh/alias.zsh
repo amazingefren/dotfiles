@@ -24,6 +24,14 @@ cd(){
     pwd > ~/.last_pwd
 }
 
+md(){
+  if [ "$1" != "" ];then
+    glow -s dark -w 60 "$1"
+  else
+    glow -s dark -w 60 README.md
+  fi
+}
+
 
 # alias cat="bat -p"
 # alias find="fd -H"
