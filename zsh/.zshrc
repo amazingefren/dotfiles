@@ -1,14 +1,16 @@
 source ~/.znap/zsh-snap/znap.zsh
+autoload -Uz compinit 
+compinit
 source "$HOME/.zsh/plugins.zsh"
 source "$HOME/.zsh/history.zsh"
 source "$HOME/.zsh/alias.zsh"
 source "$HOME/.zsh/prompt.zsh"
-
-autoload -Uz compinit 
-compinit
 zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' 'r:|=*' 'l:|=* r:|=*'
 setopt menu_complete
 setopt nocaseglob
+
+# . "/usr/share/LS_COLORS/dircolors.sh"
+export LS_COLORS="$(vivid generate $HOME/.zsh/assets/vividtheme.yml)"
 
 export EDITOR=/usr/bin/nvim
 export VISUAL=/usr/bin/nvim
