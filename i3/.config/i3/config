@@ -204,11 +204,11 @@ bindsym $mod+Shift+g    mode "$mode_gaps"
 # gaps left 5
 
 # Theme -> TODO: Bugsterish
-client.focused          #D29E79 #35363B #DBD6BD #D29E79   #D29E79
-client.focused_inactive #111213 #111213 #DBD6BD #111213   #111213
-client.unfocused        #111213 #111213 #DBD6BD #111213   #111213
-client.urgent           #131415 #D27979 #161C23 #D27979   #D27979
-client.placeholder      #131415 #131415 #DBD6BD #131415   #131415
+client.focused          #79D2A6 #35363B #DBD6BD #79D2A6   #79D2A6
+client.focused_inactive #242425 #242425 #DBD6BD #242425   #242425
+client.unfocused        #242425 #242425 #DBD6BD #242425   #242425
+client.urgent           #242425 #D27979 #242425 #D27979   #D27979
+client.placeholder      #242425 #242425 #DBD6BD #242425   #242425
 client.background       #DBD6BD
 
 
