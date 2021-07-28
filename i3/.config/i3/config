@@ -201,7 +201,24 @@ bindsym $mod+Shift+g    mode "$mode_gaps"
 ### Customziation ######################
 # Gaps
 # gaps inner 8
-# gaps left 5
+
+# VA Panel Edges Suck
+workspace $ws1 gaps left 4
+workspace $ws2 gaps left 4
+workspace $ws3 gaps left 4
+workspace $ws4 gaps left 4
+workspace $ws5 gaps left 4
+workspace $ws6 gaps left 4
+workspace $ws7 gaps left 4
+workspace $ws8 gaps left 4
+workspace $ws1 gaps right 4
+workspace $ws2 gaps right 4
+workspace $ws3 gaps right 4
+workspace $ws4 gaps right 4
+workspace $ws5 gaps right 4
+workspace $ws6 gaps right 4
+workspace $ws7 gaps right 4
+workspace $ws8 gaps right 4
 
 # Theme -> TODO: Bugsterish
 client.focused          #79D2A6 #35363B #DBD6BD #79D2A6   #79D2A6
