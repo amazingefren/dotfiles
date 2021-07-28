@@ -32,16 +32,15 @@ md(){
   fi
 }
 
-
-# alias cat="bat -p"
-# alias find="fd -H"
 # alias du="dust"
-alias fuck=b
-alias temps='watch -n.5 "grep \"^[c]pu MHz\" /proc/cpuinfo; echo && sensors k10temp-pci-00c3 amdgpu-pci-2d00"'
+# alias find="fd -H"
 # alias fm='vifm'
 # PS => PROCS
+
+alias lg=lazygit
+alias fuck=b
+alias temps='watch -n.5 "grep \"^[c]pu MHz\" /proc/cpuinfo; echo && sensors k10temp-pci-00c3 amdgpu-pci-2d00"'
 alias um='sudo reflector --verbose --country US --latest 5 --protocol https --sort rate --save /etc/pacman.d/mirrorlist'
-# alias pn='pnpm'
 
 # n ()
 # {
