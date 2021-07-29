@@ -41,6 +41,7 @@ alias lg=lazygit
 alias fuck=b
 alias temps='watch -n.5 "grep \"^[c]pu MHz\" /proc/cpuinfo; echo && sensors k10temp-pci-00c3 amdgpu-pci-2d00"'
 alias um='sudo reflector --verbose --country US --latest 5 --protocol https --sort rate --save /etc/pacman.d/mirrorlist'
+alias ..='cd ..'
 
 # n ()
 # {
