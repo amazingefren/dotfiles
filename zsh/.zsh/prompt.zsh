@@ -5,7 +5,6 @@ SPACESHIP_PROMPT_ORDER=(
   dir
   git
   vi_mode  
-  jobs
 )
 
 SPACESHIP_TIME_SHOW=true
