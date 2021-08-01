@@ -1,6 +1,6 @@
 " General Settings
 set configversion 2.0
-set theme bogsterish
+set theme idk
 set escapehatchsidebarhack true
 set smoothscroll false
 
