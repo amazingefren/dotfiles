@@ -13,6 +13,9 @@ export STARSHIP_CONFIG=~/.starship.toml
 export EDITOR=/usr/bin/nvim
 export VISUAL=/usr/bin/nvim
 export PATH=$PATH:$HOME/go/bin
+
+# ccache
+export PATH="/usr/lib/ccache/bin/:$PATH"
 export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 
