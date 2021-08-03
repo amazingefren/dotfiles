@@ -1,12 +1,14 @@
 source ~/.znap/zsh-snap/znap.zsh
-autoload -Uz compinit 
-compinit
 
 source "$HOME/.zsh/plugins.zsh"
 source "$HOME/.zsh/history.zsh"
 source "$HOME/.zsh/alias.zsh"
-source "$HOME/.zsh/prompt.zsh"
+# source "$HOME/.zsh/prompt.zsh"
 source "$HOME/.zsh/compmenu.zsh"
+
+# Slow to start, but is fast WIP
+eval "$(starship init zsh)"
+export STARSHIP_CONFIG=~/.starship.toml
 
 export EDITOR=/usr/bin/nvim
 export VISUAL=/usr/bin/nvim
