@@ -13,11 +13,12 @@ $directory\
 $time \
 [%D{%b %d}](bold cyan)\
 [\\]](bold black)
-[╰[➤](bold black)](bold black)
+[╰[─](bold black)](bold black)[> ](bold yellow)
 """
 # $time \
 # [%D{%b %d}](bold blue)
 # [╰](bold black)
+# [╰[➤](bold black)](bold black)
 
 [time]
 disabled = false
@@ -39,7 +40,7 @@ format="[@](bold white)[$hostname]($style)"
 
 [directory]
 # I spent way too long on this conditional
-format="%B%F{green}(%{%F{($read_only)})$path(%F{($read_only)}%})%F{reset_color}"
+format="%B%F{green}(%{%F{($read_only)})$path(%F{($read_only)}%})%F{reset_color}%b"
 truncation_symbol="…/"
 read_only="red"
 
