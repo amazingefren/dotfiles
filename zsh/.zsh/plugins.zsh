@@ -14,4 +14,4 @@ znap source zsh-users/zsh-completions
 # zstyle ':autocomplete:*' min-delay 0.50
 
 autoload -U promptinit; promptinit
-znap source spaceship-prompt/spaceship-prompt
+znap prompt spaceship-prompt/spaceship-prompt
