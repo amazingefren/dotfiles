@@ -3,6 +3,7 @@ SPACESHIP_PROMPT_ORDER=(
   user
   host
   dir
+  # git is performance heavy, cpu governer disable if cpu governer @ performance is not worth
   git
   vi_mode  
 )
