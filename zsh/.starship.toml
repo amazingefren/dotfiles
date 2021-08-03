@@ -1,1 +1,52 @@
 add_newline = false
+
+format = """
+[╭──](bold black)[\\[](bold black)\
+$username\
+$hostname\
+[\\]─](bold black)\
+[\\[](bold black)\
+$directory\
+[\\]](bold black)\
+([─\\[](bold black)$git_branch$git_status[\\]](bold black))\
+[─\\[](bold black)\
+$time \
+[%D{%b %d}](bold cyan)\
+[\\]](bold black)
+[╰[➤](bold black)](bold black)
+"""
+# $time \
+# [%D{%b %d}](bold blue)
+# [╰](bold black)
+
+[time]
+disabled = false
+format="[$time]($style)"
+time_format="%H:%M"
+style="bold cyan"
+
+[username]
+style_user="blue bold"
+style_root="red bold"
+format="[$user]($style)"
+show_always=true
+
+[hostname]
+disabled=false
+ssh_only=true
+style="bold cyan"
+format="[@](bold white)[$hostname]($style)"
+
+[directory]
+# I spent way too long on this conditional
+format="%B%F{green}(%{%F{($read_only)})$path(%F{($read_only)}%})%F{reset_color}"
+truncation_symbol="…/"
+read_only="red"
+
+[git_branch]
+format="[$branch]($style)"
+style="bold blue"
+
+[git_status]
+format='([\[$all_status$ahead_behind\]]($style))'
+style="bold green"
