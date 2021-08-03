@@ -1,9 +1,15 @@
 znap source mafredri/zsh-async
-znap source jeffreytse/zsh-vi-mode
 znap source zsh-users/zsh-autosuggestions
 znap source zdharma/fast-syntax-highlighting
 znap source ajeetdsouza/zoxide
 znap source zsh-users/zsh-completions
+
+# Check if running in vim
+if [[ "${VIMRUNTIME}" ]]; then
+  bindkey -e # Set zsh instance to emacs mode
+else
+  znap source jeffreytse/zsh-vi-mode
+fi
 
 # znap source marlonrichert/zsh-autocomplete
 # zstyle ':autocomplete:tab:*' accept-autosuggestions no
