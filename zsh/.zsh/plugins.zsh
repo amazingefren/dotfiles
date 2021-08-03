@@ -1,7 +1,4 @@
-autoload -Uz _zinit
-(( ${+_comps} )) && _comps[zinit]=_zinit
-
-
+znap source mafredri/zsh-async
 znap source jeffreytse/zsh-vi-mode
 znap source zsh-users/zsh-autosuggestions
 znap source zdharma/fast-syntax-highlighting
