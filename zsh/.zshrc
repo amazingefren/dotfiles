@@ -8,7 +8,7 @@ source "$HOME/.zsh/compmenu.zsh"
 
 # Slow to start, but is fast WIP
 eval "$(starship init zsh)"
-export STARSHIP_CONFIG=~/.starship.toml
+export STARSHIP_CONFIG=$HOME/.starship.toml
 
 export EDITOR=/usr/bin/nvim
 export VISUAL=/usr/bin/nvim
