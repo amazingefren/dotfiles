@@ -1,4 +1,4 @@
-add_newline = false
+add_newline = true
 
 format = """
 [╭──](bold #4f4f4f)[\\[](bold #4f4f4f)\
@@ -13,7 +13,7 @@ $directory\
 $time \
 [%D{%b %d}](bold cyan)\
 [\\]](bold #4f4f4f)
-[╰[─](bold #4f4f4f)](bold #4f4f4f)[> ](bold #4f4f4f)
+[╰[─](bold #4f4f4f)](bold #4f4f4f)[> ](bold yellow)
 """
 # $time \
 # [%D{%b %d}](bold blue)
