@@ -1,19 +1,19 @@
 add_newline = false
 
 format = """
-[╭──](bold black)[\\[](bold black)\
+[╭──](bold #4f4f4f)[\\[](bold #4f4f4f)\
 $username\
 $hostname\
-[\\]─](bold black)\
-[\\[](bold black)\
+[\\]─](bold #4f4f4f)\
+[\\[](bold #4f4f4f)\
 $directory\
-[\\]](bold black)\
-([─\\[](bold black)$git_branch$git_status[\\]](bold black))\
-[─\\[](bold black)\
+[\\]](bold #4f4f4f)\
+([─\\[](bold #4f4f4f)$git_branch$git_status[\\]](bold #4f4f4f))\
+[─\\[](bold #4f4f4f)\
 $time \
 [%D{%b %d}](bold cyan)\
-[\\]](bold black)
-[╰[─](bold black)](bold black)[> ](bold yellow)
+[\\]](bold #4f4f4f)
+[╰[─](bold #4f4f4f)](bold #4f4f4f)[> ](bold #4f4f4f)
 """
 # $time \
 # [%D{%b %d}](bold blue)
