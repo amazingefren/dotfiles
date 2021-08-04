@@ -27,15 +27,17 @@ bindsym $mod+Shift+r restart
 
 ### Launch #############################
 
+## Scripts
 # WanabeDWM
 bindsym $mod+Return         exec --no-startup-id $HOME/.config/i3/scripts/i3-send-master
+# Balance
+bindsym $mod+Tab            exec --no-startup-id $HOME/.config/i3/scripts/i3-balance
 
+## Applications
 # Terminal
 bindsym $mod+Shift+Return   exec --no-startup-id $term
-
 # Browser
 bindsym $mod+Control+Return exec --no-startup-id $browser
-
 # Launcher
 bindsym $mod+d              exec --no-startup-id $menu
 
