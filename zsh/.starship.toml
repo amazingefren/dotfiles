@@ -15,10 +15,6 @@ $time \
 [\\]](bold #4f4f4f)
 [╰[─](bold #4f4f4f)](bold #4f4f4f)[> ](bold yellow)
 """
-# $time \
-# [%D{%b %d}](bold blue)
-# [╰](bold black)
-# [╰[➤](bold black)](bold black)
 
 [time]
 disabled = false
