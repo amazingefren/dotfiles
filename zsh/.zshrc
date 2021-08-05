@@ -23,7 +23,7 @@ export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || pr
 alias ssh="kitty +kitten ssh"
 
 if [ -f ~/.last_pwd ]; then
-    cd `cat ~/.last_pwd`
+    cd `cat ~/.last_pwd` &>/dev/null
 fi 
 
 if [ -z "${DISPLAY}" ] && [ "$(tty)" = "/dev/tty1" ]; then
