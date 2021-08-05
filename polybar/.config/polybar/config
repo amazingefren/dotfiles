@@ -1,8 +1,8 @@
 [colors]
-background = #161C23
-background-alt = #313F4E 
-foreground = #E5DED7
-foreground-alt = #5BC0DC
+background = #131415
+background-alt = #35363B 
+foreground = #DBD6BD
+foreground-alt = #79C4D2
 foreground-dark = "#627D9D"
 ; foreground-alt = #F34473
 primary = #5BDCD8
@@ -24,22 +24,23 @@ foreground = ${colors.foreground}
 ; border-size = 2
 ; border-color = #00000000
 
-padding-left = 4 
+padding-left = 2 
 padding-right = 2
 
 module-margin-left = 1
 module-margin-right = 1 
 
 
-font-0 = Noto Sans Nerd Font:size=10.5:antialias=true;2
+font-0 = Nimbus Sans:size=10:antialias=true;1
 font-1 = fixed:pixelsize=10;1
-font-2 = IBM Plex Sans:size=10.5:antialias=true;2
+font-2 = Nimbus Sans Bold:size=10:style=Bold:antialias=true;1
 ; font-1 = unifont:fontformat=truetype:size=8:antialias=false;0
 ; font-2 = siji:pixelsize=10;1
 
 modules-left = news
 modules-center = i3 
-modules-right = AMC GME CRSR filesystem pulseaudio memory cpu temperature date time
+; modules-right = AMC GME CRSR filesystem pulseaudio memory cpu temperature date time
+modules-right = AMC GME memory temperature pulseaudio time
 
 tray-position = right
 tray-padding = 2
@@ -164,32 +165,33 @@ label = %percentage_used%%
 type = internal/date
 interval = 5
 
-time = %I:%M %p
-time-alt = %H:%M:%S
-
-format-prefix = "TIME "
-format-prefix-foreground = ${colors.foreground-alt}
-format-prefix-font = 3 
-format-underline = #0a6cf5
-
-label = %time%
-
-[module/date]
-type = internal/date
-interval = 5
-
-date = %a %m-%d
-date-alt = " %Y-%m-%d"
-
+date = %a %m/%d
 time = %I:%M %p
 time-alt = %H:%M:%S
 
 format-prefix = "DATE "
 format-prefix-foreground = ${colors.foreground-alt}
 format-prefix-font = 3 
-format-underline = #0a6cf5
+; format-underline = #0a6cf5
 
-label = %date%
+label = %date% %time%
+
+; [module/date]
+; type = internal/date
+; interval = 5
+
+; date = %a %m/%d
+; date-alt = " %Y-%m-%d"
+
+; time = %I:%M %p
+; time-alt = %H:%M:%S
+
+; format-prefix = "| "
+; format-prefix-foreground = ${colors.foreground-alt}
+; format-prefix-font = 3
+; ; format-underline = #0a6cf5
+
+; label = %date%
 
 [module/pulseaudio]
 type = internal/pulseaudio
@@ -197,7 +199,7 @@ type = internal/pulseaudio
 format-volume = <label-volume>
 label-volume = %percentage%%
 label-volume-foreground = ${root.foreground}
-format-volume-prefix = "VOLUME "
+format-volume-prefix = "VOL "
 format-volume-prefix-foreground = ${colors.foreground-alt}
 format-volume-prefix-font = 3 
 
@@ -214,7 +216,7 @@ format =<label>
 format-underline = #f50a4d
 format-warn = <label-warn>
 format-warn-underline = ${self.format-underline}
-format-prefix = "TEMPERATURE "
+format-prefix = "CPU "
 format-prefix-foreground = ${colors.foreground-alt}
 format-prefix-font = 3 
 
