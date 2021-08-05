@@ -11,7 +11,8 @@ set $browser firefox-beta
 exec_always --no-startup-id picom -b --experimental-backends &
 exec_always --no-startup-id easyeffects --gapplication-service &
 exec_always --no-startup-id nitrogen --restore &
-exec_always --no-startup-id $HOME/.config/polybar/launch.sh
+exec_always --no-startup-id killall spotifyd &
+exec_always --no-startup-id $HOME/.config/polybar/launch.sh &
 exec_always --no-startup-id spotifyd &
 exec_always --no-startup-id xset r rate 325 55 &
 
