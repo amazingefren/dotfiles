@@ -263,6 +263,6 @@ for_window [class="steam_app_*"] border none
 no_focus [class="steam_app_*"]
 # for_window [instance="^origin.exe$" class="Wine"] floating enable, fullscreen disable
 for_window [instance="origin.exe"] floating enable
-assign [class="origin.exe"] $ws5
+assign [class="origin.exe"] $ws7
 assign [class="Steam"] $ws5
 assign [class="Skype"] $ws9
