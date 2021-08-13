@@ -41,7 +41,7 @@ bindsym $mod+Shift+Return   exec --no-startup-id $term
 # Browser
 bindsym $mod+Control+Return exec --no-startup-id $browser
 # Launcher
-bindsym $mod+d              exec --no-startup-id $menu
+bindsym $mod+p              exec --no-startup-id $menu
 
 ### Client #############################
 
@@ -229,7 +229,7 @@ workspace $ws7 gaps right 4
 workspace $ws8 gaps right 4
 
 # Theme -> TODO: Bugsterish
-client.focused          #79D2A6 #35363B #DBD6BD #79D2A6   #79D2A6
+client.focused          #70DBA6 #35363B #DBD6BD #70DBA6   #70DBA6
 client.focused_inactive #242425 #242425 #DBD6BD #242425   #242425
 client.unfocused        #242425 #242425 #DBD6BD #242425   #242425
 client.urgent           #242425 #D27979 #242425 #D27979   #D27979
