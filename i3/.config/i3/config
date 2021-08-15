@@ -3,7 +3,7 @@ set $left h
 set $down j
 set $up k
 set $right l
-set $term kitty
+set $term alacritty
 set $menu "rofi -combi-modi 'drun,window,run' -show combi -modi combi -lines 10 -hide-scrollbar"
 set $browser firefox-beta
 
@@ -264,5 +264,6 @@ no_focus [class="steam_app_*"]
 # for_window [instance="^origin.exe$" class="Wine"] floating enable, fullscreen disable
 for_window [instance="origin.exe"] floating enable
 assign [class="origin.exe"] $ws7
+assign [class="Origin"] $ws7
 assign [class="Steam"] $ws5
 assign [class="Skype"] $ws9
