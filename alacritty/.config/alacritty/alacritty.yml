@@ -15,84 +15,48 @@ Scrolling:
 
 font:
   normal:
-    # family: "Droid Sans Mono Nerd Font Mono"
-    family: "Hack Nerd Font Mono"
+    family: "Iosevka Term"
   bold:
-    family: "Hack Nerd Font Mono"
+    family: "Iosevka Term"
     style: Bold
   italic:
-    family: "Hack Nerd Font Mono"
+    family: "Iosevka Term"
     style: Italic
   bold_italic:
-    family: "Hack Nerd Font Mono"
+    family: "Iosevka Term"
     style: Bold Italic
-  size: 9.5
+  size: 9
 
 key_bindings: 
   - {key: Back, mods: Control, chars: "\x17"}
 
-# Base16 Gruvbox dark, hard - alacritty color config
-# Dawid Kurek (dawikur@gmail.com), morhetz (https://github.com/morhetz/gruvbox)
 colors:
-  # Default colors
   primary:
-    background: '0x1d2021'
-    foreground: '0xd5c4a1'
+    background: '#0A0E1F'
+    foreground: '#ACB3D2'
 
-  # Colors the cursor will use if `custom_cursor_colors` is true
   cursor:
-    text: '0x1d2021'
-    cursor: '0xd5c4a1'
+    text: '#0A0E1F'
+    cursor: '#DBC970'
 
-  # Normal colors
   normal:
-    black:   '0x1d2021'
-    red:     '0xfb4934'
-    green:   '0xb8bb26'
-    yellow:  '0xfabd2f'
-    blue:    '0x83a598'
-    magenta: '0xd3869b'
-    cyan:    '0x8ec07c'
-    white:   '0xd5c4a1'
+    black:   '#131939'
+    red:     '#DB7070'
+    green:   '#83DB70'
+    yellow:  '#DBC970'
+    blue:    '#70C9DB'
+    magenta: '#9470DB'
+    cyan:    '#70DBA6'
+    white:   '#DEE0ED'
 
-  # Bright colors
   bright:
-    black:   '0x665c54'
-    red:     '0xfe8019'
-    green:   '0x3c3836'
-    yellow:  '0x504945'
-    blue:    '0xbdae93'
-    magenta: '0xebdbb2'
-    cyan:    '0xd65d0e'
-    white:   '0xfbf1c7'
+    black:   '#131939'
+    red:     '#DB7070'
+    green:   '#83DB70'
+    yellow:  '#DBC970'
+    blue:    '#70C9DB'
+    magenta: '#9470DB'
+    cyan:    '#70DBA6'
+    white:   '#DEE0ED'
 
 draw_bold_text_with_bright_colors: false
-
-### BOGSTERISH
-# colors:
-#   # Default colors
-#   primary:
-#     background: '#161C23'
-#     foreground: '#C7B8AE'
-
-#   # Normal colors
-#   normal:
-#     black:   '#313F4E'
-#     red:     '#F34473'
-#     green:   '#6BE156'
-#     yellow:  '#EBCF47'
-#     blue:    '#5BC0DC'
-#     magenta: '#C560E6'
-#     cyan:    '#2DD2A3'
-#     white:   '#E5DED7'
-
-#   # Bright colors
-#   bright:
-#     black:   '#415368'
-#     red:     '#DC5B80'
-#     green:   '#83E85E'
-#     yellow:  '#F2A145'
-#     blue:    '#5BDCD8'
-#     magenta: '#DC5BC0'
-#     cyan:    '#5BDCB8'
-#     white:   '#FFFFFF'
