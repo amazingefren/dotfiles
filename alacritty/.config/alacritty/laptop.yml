@@ -25,7 +25,7 @@ font:
   bold_italic:
     family: "Iosevka Term"
     style: Bold Italic
-  size: 8
+  size: 7
 
 key_bindings: 
   - {key: Back, mods: Control, chars: "\x17"}
