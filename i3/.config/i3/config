@@ -229,27 +229,17 @@ workspace $ws7 gaps right 4
 workspace $ws8 gaps right 4
 
 # Theme -> TODO: Bugsterish
-client.focused          #70DBA6 #35363B #DBD6BD #70DBA6   #70DBA6
-client.focused_inactive #242425 #242425 #DBD6BD #242425   #242425
-client.unfocused        #242425 #242425 #DBD6BD #242425   #242425
-client.urgent           #242425 #D27979 #242425 #D27979   #D27979
-client.placeholder      #242425 #242425 #DBD6BD #242425   #242425
-client.background       #DBD6BD
-
-
 # class                 border  bground text    indicator child_border
-# client.focused          #6272A4 #6272A4 #F8F8F2 #6272A4   #6272A4
-# client.focused_inactive #44475A #44475A #F8F8F2 #44475A   #44475A
-# client.unfocused        #282A36 #282A36 #BFBFBF #282A36   #282A36
-# client.urgent           #44475A #FF5555 #F8F8F2 #FF5555   #FF5555
-# client.placeholder      #282A36 #282A36 #F8F8F2 #282A36   #282A36
-# 
-# client.background       #F8F8F2
-
+client.focused          #70C9DB #0E132A #ACB3D2 #70C9DB   #70C9DB
+client.focused_inactive #0A0E1F #0A0E1F #ACB3D2 #0A0E1F   #0E132A
+client.unfocused        #0A0E1F #0A0E1F #ACB3D2 #0A0E1F   #0E132A
+client.urgent           #0A0E1F #DB7070 #0A0E1F #DB7070   #DB7070
+client.placeholder      #0A0E1F #0A0E1F #ACB3D2 #0A0E1F   #0A0E1F
+client.background       #ACB3D2
 
 font pango:IBM Plex Sans Condensed Bold 9 
 # default_border pixel 2
-for_window [class=".*"] border pixel 2
+for_window [class=".*"] border pixel 1
 # for_window [class=".*"] floating enable
 hide_edge_borders smart
 
