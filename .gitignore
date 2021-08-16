@@ -5,5 +5,6 @@ spotify-tui/.config/spotify-tui/.spotify_token_cache.json
 spotifyd/.config/spotifyd/spotifyd.conf
 
 kitty/.config/kitty/active.conf
+alacritty/.config/alacritty/alacritty.yml
 
 picom/.config/picom/picom.conf
