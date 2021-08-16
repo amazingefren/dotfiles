@@ -12,7 +12,7 @@ static const char col_gray2[]       = "#202A60";
 static const char col_gray3[]       = "#ACB3D2";
 static const char col_gray4[]       = "#DEE0ED";
 static const char col_base[]        = "#202A60";
-static const char col_border[]      = "#3D4B8F";
+static const char col_border[]      = "#7A85B8";
 static const char col_cyan[]        = "#70DBA6";
 static const char *colors[][3]      = {
 	/*               fg         bg         border   */
@@ -30,14 +30,15 @@ static const Rule rules[] = {
 	
 	/* class      instance    title       tags mask     isfloating  monitor */
 	{ "Gimp",     NULL,       NULL,       0,            1,          -1 },
-	{ "firefox",  NULL,       NULL,       1 << 8,       0,          -1 },
+ /*{ "firefox",  NULL,       NULL,       1 << 8,       0,          -1 },*/
 };
 
 /* layout(s) */
 static const float mfact     = 0.55; /* factor of master area size [0.05..0.95] */
 static const int nmaster     = 1;    /* number of clients in master area */
-static const int resizehints = 1;    /* 1 means respect size hints in tiled resizals */
+static const int resizehints = 0;    /* 1 means respect size hints in tiled resizals */
 static const int lockfullscreen = 0; /* 1 will force focus on the fullscreen window */
+static const unsigned int gappx = 2;
 
 static const Layout layouts[] = {
 	/* symbol     arrange function */
