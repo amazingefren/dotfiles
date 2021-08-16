@@ -3,7 +3,7 @@ set $left h
 set $down j
 set $up k
 set $right l
-set $term kitty
+set $term alacritty
 set $menu "rofi -combi-modi 'drun,window,run' -show combi -modi combi -lines 10 -hide-scrollbar"
 set $browser firefox-beta
 
@@ -41,7 +41,7 @@ bindsym $mod+Shift+Return   exec --no-startup-id $term
 # Browser
 bindsym $mod+Control+Return exec --no-startup-id $browser
 # Launcher
-bindsym $mod+d              exec --no-startup-id $menu
+bindsym $mod+p              exec --no-startup-id $menu
 
 ### Client #############################
 
@@ -229,7 +229,7 @@ workspace $ws7 gaps right 4
 workspace $ws8 gaps right 4
 
 # Theme -> TODO: Bugsterish
-client.focused          #79D2A6 #35363B #DBD6BD #79D2A6   #79D2A6
+client.focused          #70DBA6 #35363B #DBD6BD #70DBA6   #70DBA6
 client.focused_inactive #242425 #242425 #DBD6BD #242425   #242425
 client.unfocused        #242425 #242425 #DBD6BD #242425   #242425
 client.urgent           #242425 #D27979 #242425 #D27979   #D27979
@@ -264,5 +264,6 @@ no_focus [class="steam_app_*"]
 # for_window [instance="^origin.exe$" class="Wine"] floating enable, fullscreen disable
 for_window [instance="origin.exe"] floating enable
 assign [class="origin.exe"] $ws7
+assign [class="Origin"] $ws7
 assign [class="Steam"] $ws5
 assign [class="Skype"] $ws9
