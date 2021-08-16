@@ -1,0 +1,62 @@
+env:
+  TERM: alacritty
+
+window:
+  padding:
+    x: 2
+    y: 2
+    dynamic_padding: true
+
+# background_opacity: 0.98
+
+Scrolling:
+  history: 10000
+  multiplier: 5
+
+font:
+  normal:
+    family: "Iosevka Term"
+  bold:
+    family: "Iosevka Term"
+    style: Bold
+  italic:
+    family: "Iosevka Term"
+    style: Italic
+  bold_italic:
+    family: "Iosevka Term"
+    style: Bold Italic
+  size: 9
+
+key_bindings: 
+  - {key: Back, mods: Control, chars: "\x17"}
+
+colors:
+  primary:
+    background: '#0A0E1F'
+    foreground: '#ACB3D2'
+
+  cursor:
+    text: '#0A0E1F'
+    cursor: '#DBC970'
+
+  normal:
+    black:   '#131939'
+    red:     '#DB7070'
+    green:   '#83DB70'
+    yellow:  '#DBC970'
+    blue:    '#70C9DB'
+    magenta: '#9470DB'
+    cyan:    '#70DBA6'
+    white:   '#DEE0ED'
+
+  bright:
+    black:   '#131939'
+    red:     '#DB7070'
+    green:   '#83DB70'
+    yellow:  '#DBC970'
+    blue:    '#70C9DB'
+    magenta: '#9470DB'
+    cyan:    '#70DBA6'
+    white:   '#DEE0ED'
+
+draw_bold_text_with_bright_colors: false
