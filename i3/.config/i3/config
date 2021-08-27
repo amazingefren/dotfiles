@@ -34,6 +34,8 @@ bindsym $mod+Shift+r restart
 bindsym $mod+Return         exec --no-startup-id $HOME/.config/i3/scripts/i3-send-master
 # Balance
 bindsym $mod+Tab            exec --no-startup-id $HOME/.config/i3/scripts/i3-balance
+# 2560 width
+bindsym $mod+g              resize set width 2560
 
 ## Applications
 # Terminal
