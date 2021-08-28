@@ -32,31 +32,31 @@ key_bindings:
 
 colors:
   primary:
-    background: '#0A0E1F'
-    foreground: '#ACB3D2'
+    background: '#0F1D2E'
+    foreground: '#C6C0B9'
 
   cursor:
-    text: '#0A0E1F'
-    cursor: '#DBC970'
+    cursor: '#C6C0B9'
+    text: '#0F1D2E'
 
   normal:
-    black:   '#131939'
-    red:     '#DB7070'
-    green:   '#83DB70'
-    yellow:  '#DBC970'
-    blue:    '#70C9DB'
-    magenta: '#9470DB'
-    cyan:    '#70DBA6'
-    white:   '#DEE0ED'
+    black:   '#152537'
+    red:     '#E48181'
+    green:   '#BBE481'
+    yellow:  '#E4D481'
+    blue:    '#81AEE4'
+    magenta: '#AA81E4'
+    cyan:    '#81E4B3'
+    white:   '#E8E6E3'
 
   bright:
-    black:   '#131939'
-    red:     '#DB7070'
-    green:   '#83DB70'
-    yellow:  '#DBC970'
-    blue:    '#70C9DB'
-    magenta: '#9470DB'
-    cyan:    '#70DBA6'
-    white:   '#DEE0ED'
+    black:   '#152537'
+    red:     '#E48181'
+    green:   '#BBE481'
+    yellow:  '#E4D481'
+    blue:    '#81AEE4'
+    magenta: '#AA81E4'
+    cyan:    '#81E4B3'
+    white:   '#E8E6E3'
 
 draw_bold_text_with_bright_colors: false
