@@ -4,18 +4,19 @@ set $down j
 set $up k
 set $right l
 set $term kitty
-set $menu "rofi -combi-modi 'drun,window,run' -show combi -modi combi -lines 10 -hide-scrollbar"
+# set $menu "rofi -combi-modi 'drun,window,run' -show combi -modi combi -lines 10 -hide-scrollbar"
+set $menu i3-dmenu-desktop
 set $browser firefox-beta
 
 ### Autostart ##########################
 exec_always --no-startup-id picom -b --experimental-backends &
 exec_always --no-startup-id easyeffects --gapplication-service &
-exec_always --no-startup-id nitrogen --restore &
 exec_always --no-startup-id dunst &
 exec_always --no-startup-id killall spotifyd &
 exec_always --no-startup-id $HOME/.config/polybar/launch.sh &
 exec_always --no-startup-id spotifyd &
-exec_always --no-startup-id xset r rate 325 55 &
+exec_always --no-startup-id xset r rate 300 60 &
+exec_always --no-startup-id nitrogen --restore &
 
 exec_always --no-startup-id setxkbmap -option ctrl:nocaps &
 
@@ -166,6 +167,7 @@ mode "$Power-System" {
     bindsym q exec --no-startup-id systemctl suspend,       mode "default"
     bindsym r exec --no-startup-id systemctl reboot,        mode "default"
     bindsym s exec --no-startup-id systemctl poweroff -i,   mode "default"
+    bindsym e exec --no-startup-id i3-msg exit,   mode "default"
     bindsym l exec --no-startup-id $lock, 				    mode "default"
     bindsym Return  mode "default"
     bindsym Escape  mode "default"
@@ -244,7 +246,7 @@ client.urgent           #0A0E1F #DB7070 #0A0E1F #DB7070   #DB7070
 client.placeholder      #0A0E1F #0A0E1F #ACB3D2 #0A0E1F   #0A0E1F
 client.background       #ACB3D2
 
-font pango:IBM Plex Sans Condensed Bold 9 
+font pango:Roboto 10
 # default_border pixel 2
 for_window [class=".*"] border pixel 1
 # for_window [class=".*"] floating enable
