@@ -9,7 +9,7 @@ set $menu i3-dmenu-desktop
 set $browser firefox-beta
 
 ### Autostart ##########################
-exec_always --no-startup-id picom -b --experimental-backends &
+exec_always --no-startup-id killall picom; picom -b --experimental-backends &
 exec_always --no-startup-id easyeffects --gapplication-service &
 exec_always --no-startup-id dunst &
 exec_always --no-startup-id killall spotifyd &
