@@ -9,7 +9,7 @@ set $menu i3-dmenu-desktop
 set $browser firefox-beta
 
 ### Autostart ##########################
-exec_always --no-startup-id picom -b --experimental-backends &
+exec_always --no-startup-id killall picom; picom -b --experimental-backends &
 exec_always --no-startup-id easyeffects --gapplication-service &
 exec_always --no-startup-id dunst &
 exec_always --no-startup-id killall spotifyd &
@@ -18,7 +18,9 @@ exec_always --no-startup-id spotifyd &
 exec_always --no-startup-id xset r rate 300 60 &
 exec_always --no-startup-id nitrogen --restore &
 
-exec_always --no-startup-id setxkbmap -option ctrl:nocaps &
+# exec_always --no-startup-id setxkbmap -option ctrl:nocaps &
+exec_always --no-startup-id setxkbmap -option caps:ctrl_modifier
+exec_always --no-startup-id setxkbmap -option altwin:swap_lalt_lwin
 
 ### System #############################
 
@@ -293,3 +295,12 @@ bindsym XF86AudioRaiseVolume exec --no-startup-id qdbus org.kde.kglobalaccel /co
 bindsym XF86AudioLowerVolume exec --no-startup-id qdbus org.kde.kglobalaccel /component/kmix invokeShortcut "decrease_volume"
 bindsym XF86AudioMute exec --no-startup-id qdbus org.kde.kglobalaccel /component/kmix invokeShortcut "mute"
 bindsym XF86AudioMicMute exec --no-startup-id qdbus org.kde.kglobalaccel /component/kmix invokeShortcut "mic_mute"
+
+bar {
+    status_command py3status
+    mode hide
+    height 30
+    colors {
+      background #242424
+    }
+}

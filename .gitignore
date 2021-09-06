@@ -8,3 +8,5 @@ kitty/.config/kitty/active.conf
 alacritty/.config/alacritty/alacritty.yml
 
 picom/.config/picom/picom.conf
+
+i3/.config/i3/config
