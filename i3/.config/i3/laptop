@@ -1,0 +1,295 @@
+set $mod Mod4
+set $left h
+set $down j
+set $up k
+set $right l
+set $term kitty
+# set $menu "rofi -combi-modi 'drun,window,run' -show combi -modi combi -lines 10 -hide-scrollbar"
+set $menu i3-dmenu-desktop
+set $browser firefox-beta
+
+### Autostart ##########################
+exec_always --no-startup-id picom -b --experimental-backends &
+exec_always --no-startup-id easyeffects --gapplication-service &
+exec_always --no-startup-id dunst &
+exec_always --no-startup-id killall spotifyd &
+exec_always --no-startup-id $HOME/.config/polybar/launch.sh &
+exec_always --no-startup-id spotifyd &
+exec_always --no-startup-id xset r rate 300 60 &
+exec_always --no-startup-id nitrogen --restore &
+
+exec_always --no-startup-id setxkbmap -option ctrl:nocaps &
+
+### System #############################
+
+# Mouse Tiling
+floating_modifier $mod
+
+# Reload Config
+bindsym $mod+Shift+r restart
+
+### Launch #############################
+
+## Scripts
+# WanabeDWM
+bindsym $mod+Return         exec --no-startup-id $HOME/.config/i3/scripts/i3-send-master
+# Balance
+bindsym $mod+Tab            exec --no-startup-id $HOME/.config/i3/scripts/i3-balance
+# 2560 width
+bindsym $mod+g              resize set width 2560
+
+## Applications
+# Terminal
+bindsym $mod+Shift+Return   exec --no-startup-id $term
+# Browser
+bindsym $mod+Control+Return exec --no-startup-id $browser
+# Launcher
+bindsym $mod+p              exec --no-startup-id $menu
+
+### Client #############################
+
+# Focus
+bindsym $mod+$left          focus left
+bindsym $mod+$down          focus down
+bindsym $mod+$up            focus up
+bindsym $mod+$right         focus right
+
+# Move
+bindsym $mod+Shift+$left    move left
+bindsym $mod+Shift+$down    move down
+bindsym $mod+Shift+$up      move up
+bindsym $mod+Shift+$right   move right
+
+# Kill
+bindsym $mod+Shift+c kill
+
+### Workspaces #########################
+set $ws1 "1:I"
+set $ws2 "2:II"
+set $ws3 "3:III"
+set $ws4 "4:IV"
+set $ws5 "5:V"
+set $ws6 "6:VI"
+set $ws7 "7:VII"
+set $ws8 "8:VIII"
+set $ws9 "9:IX"
+set $ws0 "10:X"
+
+# Monitor Configuration
+set $main DisplayPort-0
+set $secondary DisplayPort-1
+
+# Workspace Keybind
+bindsym $mod+1 workspace $ws1
+bindsym $mod+2 workspace $ws2
+bindsym $mod+3 workspace $ws3
+bindsym $mod+4 workspace $ws4
+bindsym $mod+5 workspace $ws5
+bindsym $mod+6 workspace $ws6
+bindsym $mod+7 workspace $ws7
+bindsym $mod+8 workspace $ws8
+bindsym $mod+9 workspace $ws9
+bindsym $mod+0 workspace $ws0
+
+# Monitor Assignments
+workspace $ws1 output $main
+workspace $ws2 output $main
+workspace $ws3 output $main
+workspace $ws4 output $main
+workspace $ws5 output $main
+workspace $ws6 output $main
+workspace $ws7 output $main
+workspace $ws8 output $main
+workspace $ws9 output $secondary
+workspace $ws0 output $secondary
+
+# Move Window to Workspace
+bindsym $mod+Shift+1 move container to workspace $ws1
+bindsym $mod+Shift+2 move container to workspace $ws2
+bindsym $mod+Shift+3 move container to workspace $ws3
+bindsym $mod+Shift+4 move container to workspace $ws4
+bindsym $mod+Shift+5 move container to workspace $ws5
+bindsym $mod+Shift+6 move container to workspace $ws6
+bindsym $mod+Shift+7 move container to workspace $ws7
+bindsym $mod+Shift+8 move container to workspace $ws8
+bindsym $mod+Shift+9 move container to workspace $ws9
+bindsym $mod+Shift+0 move container to workspace $ws0
+
+### Layout #############################
+
+# Toggle Split
+bindsym $mod+q split toggle
+
+# Switch Layout for Focused Workspace
+bindsym $mod+s layout stacking
+bindsym $mod+w layout tabbed
+bindsym $mod+e layout toggle split
+
+# Fullscreen
+bindsym $mod+f fullscreen
+
+# Toggle Floating Application
+bindsym $mod+Shift+space floating toggle
+
+# Toggle Between Floating and Tiled Applications
+bindsym $mod+space focus mode_toggle
+
+# Focus Parent
+bindsym $mod+a focus parent mode_toggle
+
+# Focus Child
+bindsym $mod+c focus child
+
+### Scratchpad #########################
+
+# Move to Scratchpad
+bindsym $mod+Shift+minus move scratchpad
+
+# Show/Cycle Scrathpad
+bindsym $mod+minus scratchpad show
+
+### Modes ##############################
+
+##### Resize Mode ######
+set $Resize Resize: (h): -Width, (j): +Height, (k): -Height, (l): +Width
+mode "$Resize" {
+    bindsym $left   resize shrink width 10px or 1ppt
+    bindsym $down   resize grow height 10px or 1ppt
+    bindsym $up     resize shrink height 10px or 1ppt
+    bindsym $right  resize grow width 10px or 1ppt
+    bindsym Return  mode "default"
+    bindsym Escape  mode "default"
+}
+
+##### Power Mode #####
+set $Power-System  Power: S-Shutdown, R-Restart, L-Lock, E-Exit, Q-Suspend
+mode "$Power-System" {
+    bindsym q exec --no-startup-id systemctl suspend,       mode "default"
+    bindsym r exec --no-startup-id systemctl reboot,        mode "default"
+    bindsym s exec --no-startup-id systemctl poweroff -i,   mode "default"
+    bindsym e exec --no-startup-id i3-msg exit,   mode "default"
+    bindsym l exec --no-startup-id $lock, 				    mode "default"
+    bindsym Return  mode "default"
+    bindsym Escape  mode "default"
+}
+
+##### Gaps Change Mode #####
+set $mode_gaps Gaps: (o) outer, (i) inner
+set $mode_gaps_outer Outer Gaps: +|-|0 (local), Shift + +|-|0 (global)
+set $mode_gaps_inner Inner Gaps: +|-|0 (local), Shift + +|-|0 (global)
+mode "$mode_gaps" {
+    bindsym o      mode "$mode_gaps_outer"
+    bindsym i      mode "$mode_gaps_inner"
+    bindsym Return mode "default"
+    bindsym Escape mode "default"
+}
+mode "$mode_gaps_inner" {
+    bindsym equal       gaps inner current plus 5
+    bindsym minus       gaps inner current minus 5
+    bindsym 0           gaps inner current set 0
+    bindsym Shift+plus  gaps inner all plus 5
+    bindsym Shift+minus gaps inner all minus 5
+    bindsym Shift+0     gaps inner all set 0
+    bindsym Return mode "default"
+    bindsym Escape mode "default"
+}
+mode "$mode_gaps_outer" {
+    bindsym equal       gaps outer current plus 5
+    bindsym minus       gaps outer current minus 5
+    bindsym 0           gaps outer current set 0
+    bindsym Shift+plus  gaps outer all plus 5
+    bindsym Shift+minus gaps outer all minus 5
+    bindsym Shift+0     gaps outer all set 0
+    bindsym Return mode "default"
+    bindsym Escape mode "default"
+}
+
+
+## Enter Modes
+bindsym $mod+r          mode "$Resize"
+bindsym $mod+Shift+q          mode "$Power-System"
+bindsym $mod+Shift+g    mode "$mode_gaps"
+
+### Customziation ######################
+# Gaps
+# gaps inner 8
+
+# VA Panel Edges Suck
+# workspace $ws1 gaps left 4
+# workspace $ws2 gaps left 4
+# workspace $ws3 gaps left 4
+# workspace $ws4 gaps left 4
+# workspace $ws5 gaps left 4
+# workspace $ws6 gaps left 4
+# workspace $ws7 gaps left 4
+# workspace $ws8 gaps left 4
+# workspace $ws1 gaps right 4
+# workspace $ws2 gaps right 4
+# workspace $ws3 gaps right 4
+# workspace $ws4 gaps right 4
+# workspace $ws5 gaps right 4
+# workspace $ws6 gaps right 4
+# workspace $ws7 gaps right 4
+# workspace $ws8 gaps right 4
+
+workspace $ws9 gaps left 4
+workspace $ws0 gaps left 4
+workspace $ws9 gaps right 4
+workspace $ws0 gaps right 4
+
+# Theme -> TODO: Bugsterish
+# class                 border  bground text    indicator child_border
+client.focused          #70C9DB #0E132A #ACB3D2 #70C9DB   #70C9DB
+client.focused_inactive #0A0E1F #0A0E1F #ACB3D2 #0A0E1F   #0E132A
+client.unfocused        #0A0E1F #0A0E1F #ACB3D2 #0A0E1F   #0E132A
+client.urgent           #0A0E1F #DB7070 #0A0E1F #DB7070   #DB7070
+client.placeholder      #0A0E1F #0A0E1F #ACB3D2 #0A0E1F   #0A0E1F
+client.background       #ACB3D2
+
+font pango:Roboto 10
+# default_border pixel 2
+for_window [class=".*"] border pixel 1
+# for_window [class=".*"] floating enable
+hide_edge_borders smart
+
+for_window [window_role="bubble"] floating enable 
+for_window [window_role="task_dialog"] floating enable
+for_window [window_role="Preferences"] floating enable
+for_window [window_type="dialog"] floating enable 
+for_window [window_type="menu"] floating enable
+for_window [class="steam_app_*"] floating enable
+for_window [class="steam_app_*"] border none
+no_focus [class="steam_app_*"]
+# for_window [instance="^origin.exe$" class="Wine"] floating enable, fullscreen disable
+for_window [instance="origin.exe"] floating enable
+assign [class="^origin.exe"] $ws7
+assign [class="^origin"] $ws7
+assign [class="Steam"] $ws5
+assign [class="Skype"] $ws9
+
+### KWIN
+for_window [title="Desktop — Plasma"] kill; floating enable; border none
+for_window [title="ksplashqml"] kill; floating enable; border none
+
+# Plasma compatibility improvements
+for_window [window_role="pop-up"] floating enable
+for_window [window_role="task_dialog"] floating enable
+
+for_window [class="yakuake"] floating enable
+for_window [class="systemsettings"] floating enable
+for_window [class="plasmashell"] floating enable;
+for_window [class="Plasma"] floating enable; border none
+for_window [title="plasma-desktop"] floating enable; border none
+for_window [title="win7"] floating enable; border none
+for_window [class="krunner"] floating enable; border none
+for_window [class="Kmix"] floating enable; border none
+for_window [class="Klipper"] floating enable; border none
+for_window [class="Plasmoidviewer"] floating enable; border none
+for_window [class="(?i)*nextcloud*"] floating disable
+for_window [class="plasmashell" window_type="notification"] border none, move right 700px, move down 450px
+no_focus [class="plasmashell" window_type="notification"]
+
+bindsym XF86AudioRaiseVolume exec --no-startup-id qdbus org.kde.kglobalaccel /component/kmix invokeShortcut "increase_volume"
+bindsym XF86AudioLowerVolume exec --no-startup-id qdbus org.kde.kglobalaccel /component/kmix invokeShortcut "decrease_volume"
+bindsym XF86AudioMute exec --no-startup-id qdbus org.kde.kglobalaccel /component/kmix invokeShortcut "mute"
+bindsym XF86AudioMicMute exec --no-startup-id qdbus org.kde.kglobalaccel /component/kmix invokeShortcut "mic_mute"
