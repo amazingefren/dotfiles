@@ -1,4 +1,9 @@
 setopt HIST_IGNORE_ALL_DUPS
+
+if [[ ! -d "$HOME/.zim" ]]; then
+  curl -fsSL https://raw.githubusercontent.com/zimfw/install/master/install.zsh | zsh
+fi
+
 if [[ "${VIMRUNTIME}" ]]; then
   bindkey -e # Set zsh instance to emacs mode
   else
