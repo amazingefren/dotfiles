@@ -212,7 +212,7 @@ bindsym $mod+Shift+g    mode "$mode_gaps"
 
 ### Customziation ######################
 # Gaps
-# gaps inner 8
+gaps inner 8
 
 # VA Panel Edges Suck
 # workspace $ws1 gaps left 4
@@ -239,11 +239,11 @@ workspace $ws0 gaps right 4
 
 # Theme -> TODO: Bugsterish
 # class                 border  bground text    indicator child_border
-client.focused          #70C9DB #0E132A #ACB3D2 #70C9DB   #70C9DB
-client.focused_inactive #0A0E1F #0A0E1F #ACB3D2 #0A0E1F   #0E132A
-client.unfocused        #0A0E1F #0A0E1F #ACB3D2 #0A0E1F   #0E132A
-client.urgent           #0A0E1F #DB7070 #0A0E1F #DB7070   #DB7070
-client.placeholder      #0A0E1F #0A0E1F #ACB3D2 #0A0E1F   #0A0E1F
+client.focused          #67E4A6 #737E8C #ACB3D2 #67E4A6   #67E4A6
+client.focused_inactive #737E8C #737E8C #ACB3D2 #737E8C   #737E8C
+client.unfocused        #737E8C #737E8C #ACB3D2 #737E8C   #737E8C
+client.urgent           #737E8C #DB7070 #737E8C #DB7070   #DB7070
+client.placeholder      #737E8C #737E8C #ACB3D2 #737E8C   #737E8C
 client.background       #ACB3D2
 
 font pango:Roboto 10
