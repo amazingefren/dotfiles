@@ -34,6 +34,8 @@ bindkey '^N' history-substring-search-down
 bindkey -M vicmd 'k' history-substring-search-up
 bindkey -M vicmd 'j' history-substring-search-down
 
+bindkey '^f' autosuggest-accept
+
 source "$HOME/.zsh/history.zsh"
 source "$HOME/.zsh/alias.zsh"
 # source "$HOME/.zsh/plugins.zsh"
