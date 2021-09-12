@@ -5,8 +5,9 @@ set $up k
 set $right l
 set $term kitty
 # set $menu "rofi -combi-modi 'drun,window,run' -show combi -modi combi -lines 10 -hide-scrollbar"
-set $menu i3-dmenu-desktop
-set $browser firefox-beta
+# set $menu i3-dmenu-desktop
+set $menu $HOME/.config/rofi/launchers/misc/launcher.sh
+set $browser brave
 
 ### Autostart ##########################
 exec_always --no-startup-id killall picom; picom -b --experimental-backends &
@@ -239,14 +240,14 @@ workspace $ws0 gaps right 4
 
 # Theme -> TODO: Bugsterish
 # class                 border  bground text    indicator child_border
-client.focused          #67E4A6 #737E8C #ACB3D2 #67E4A6   #67E4A6
-client.focused_inactive #737E8C #737E8C #ACB3D2 #737E8C   #737E8C
-client.unfocused        #737E8C #737E8C #ACB3D2 #737E8C   #737E8C
-client.urgent           #737E8C #DB7070 #737E8C #DB7070   #DB7070
-client.placeholder      #737E8C #737E8C #ACB3D2 #737E8C   #737E8C
-client.background       #ACB3D2
+client.focused          #444444 #222222AA #E8DBC9 #E8DBC9   #D2C2AC
+client.focused_inactive #222222 #111111AA #404040 #FF0000   #222222
+client.unfocused        #222222 #111111AA #404040 #595959   #222222
+client.urgent           #222222 #E47267AA #141414 #E47267   #E47267
+client.placeholder      #222222 #111111AA #D2C2AC #595959   #595959
+client.background       #333333
 
-font pango:Roboto 10
+font pango:SF Pro Text 10
 # default_border pixel 2
 for_window [class=".*"] border pixel 1
 # for_window [class=".*"] floating enable
