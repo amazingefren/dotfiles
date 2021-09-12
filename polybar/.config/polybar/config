@@ -59,7 +59,7 @@ type= custom/script
 exec = /home/amazingefren/.config/polybar/scripts/news
 interval = 30
 ; click-left = < ~/.config/polybar/scripts/savednews/current_url.txt xargs -I % xdg-open %
-click-left = nohup xdg-open $(head -n 1 ~/.config/polybar/scripts/savednews/current_url.txt) >/dev/null 2>&1&
+click-left = nohup xdg-open $(head -n 1 $HOME/.config/polybar/scripts/savednews/current_url.txt) >/dev/null 2>&1&
 format-foreground = ${colors.foreground}
 
 [module/AMC]
