@@ -10,7 +10,7 @@ cd(){
     else
         pushd ~ &>/dev/null
     fi
-    ls
+    # ls
 }
 
 md(){
@@ -43,3 +43,13 @@ alias alexaturnonthecamera='sudo modprobe v4l2loopback devices=1 video_nr=10 car
 runfg(){echo;fg}
 zle -N runfg
 bindkey '^Z' runfg
+
+findfolder(){
+  local wheretogo=$(fd -c always -H -t d . $HOME -E .git -E node_modules -E .cache -E local | fzf)
+  if [[ ! -z "$wheretogo" ]];then
+    cd "$wheretogo"
+  fi
+  zle reset-prompt
+}
+zle -N findfolder
+bindkey '^T' findfolder
