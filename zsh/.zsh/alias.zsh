@@ -45,11 +45,22 @@ zle -N runfg
 bindkey '^Z' runfg
 
 findfolder(){
-  local wheretogo=$(fd -c always -H -t d -t l . $HOME -E .git -E node_modules -E .cache -E .local --max-depth 10 -E .npm -E .rustup| fzf)
+  local wheretogo=$(fd -c always -H -t d -t l . $HOME -E .git -E node_modules -E .cache -E .local --max-depth 10 -E .npm -E .rustup| fzf --preview 'exa -a1 {}')
   if [[ ! -z "$wheretogo" ]];then
     cd "$wheretogo"
+    zle reset-prompt
   fi
-  zle reset-prompt
 }
+
+findfile(){
+  local file=$(fd . -c always -t f -H -E node_modules -E .yarn -E .git -E .npm -E .cargo --max-depth 10 -j 12 | fzf --preview 'bat {} --color always --decorations auto --theme "Dracula" --style rule,numbers')
+  if [[ ! -z "$file" ]];then
+    vim "$file"
+  fi
+}
+
 zle -N findfolder
 bindkey '^T' findfolder
+
+zle -N findfile
+bindkey '^R' findfile
