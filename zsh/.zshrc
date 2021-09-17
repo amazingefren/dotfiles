@@ -4,11 +4,10 @@ if [[ ! -d "$HOME/.zim" ]]; then
   curl -fsSL https://raw.githubusercontent.com/zimfw/install/master/install.zsh | zsh
 fi
 
-if [[ "${VIMRUNTIME}" ]]; then
-  bindkey -e # Set zsh instance to emacs mode
-  else
-  bindkey -v
-fi
+# if [[ "${VIMRUNTIME}" ]]; then
+#   bindkey -e # Set zsh instance to emacs mode
+#   else
+bindkey -v # fi
 setopt CORRECT
 SPROMPT='zsh: correct %F{red}%R%f to %F{green}%r%f [nyae]? '
 # Remove path separator from WORDCHARS.

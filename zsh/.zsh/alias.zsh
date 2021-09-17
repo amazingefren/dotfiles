@@ -45,7 +45,7 @@ zle -N runfg
 bindkey '^Z' runfg
 
 findfolder(){
-  local wheretogo=$(fd -c always -H -t d -t l . $HOME -E .git -E node_modules -E .cache -E local | fzf)
+  local wheretogo=$(fd -c always -H -t d -t l . $HOME -E .git -E node_modules -E .cache -E .local --max-depth 10 -E .npm -E .rustup| fzf)
   if [[ ! -z "$wheretogo" ]];then
     cd "$wheretogo"
   fi
