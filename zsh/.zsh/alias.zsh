@@ -74,4 +74,4 @@ zle -N findfolder
 bindkey '^T' findfolder
 
 zle -N findfile
-bindkey '^R' findfile
+bindkey '^N' findfile
