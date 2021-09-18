@@ -1,4 +1,6 @@
 # alias ls="exa --group-directories-first"
+export LS_COLORS="$(vivid generate $HOME/.zsh/assets/vividtheme.yml)"
+
 alias lsa="ls -a"
 alias lst="ls -T --level 2"
 
@@ -44,8 +46,15 @@ runfg(){echo;fg}
 zle -N runfg
 bindkey '^Z' runfg
 
+export FZF_DEFAULT_OPTS=$FZF_DEFAULT_OPTS'
+--no-bold
+--color=dark
+--color=fg:-1,bg:-1,hl:#5fff87,fg+:-1,bg+:-1,hl+:#ffaf5f
+--color=info:#af87ff,prompt:#5fff87,pointer:#ff87d7,marker:#ff87d7,spinner:#ff87d7
+'
+
 findfolder(){
-  local wheretogo=$(fd -c always -H -t d -t l . $HOME -E .git -E node_modules -E .cache -E .local --max-depth 10 -E .npm -E .rustup| fzf --preview 'exa -a1 {}')
+  local wheretogo=$(fd . $HOME --full-path -p -c always -H -t d -t l -E .git -E node_modules -E .cache -E .local --max-depth 10 -E .npm -E .rustup| fzf --preview 'exa -a1 {}')
   if [[ ! -z "$wheretogo" ]];then
     cd "$wheretogo"
     zle reset-prompt
@@ -53,7 +62,9 @@ findfolder(){
 }
 
 findfile(){
-  local file=$(fd . -c always -t f -H -E node_modules -E .yarn -E .git -E .npm -E .cargo --max-depth 10 -j 12 | fzf --preview 'bat {} --color always --decorations auto --theme "Dracula" --style rule,numbers')
+  local file=$(fd . -c always -t f -L --no-ignore -H --max-depth 8 \
+    -E .steam -E .rustup -E node -E .cache -E .zim -E c: -E z: -E proton -E .lock -E SSD -E .nvm -E .asdf -E .local -E .emacs -E .shaders -E .wine -E node_modules -E .yarn -E .git -E .npm -E .cargo \
+    | fzf --preview 'bat {} --color always --decorations auto --theme "Dracula" --style rule,numbers')
   if [[ ! -z "$file" ]];then
     vim "$file"
   fi

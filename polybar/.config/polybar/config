@@ -1,5 +1,6 @@
 [colors]
 background = #AA101010
+; background = #000000
 background-alt = #35363B 
 foreground = #FFFFFF
 foreground-alt = #79C4D2
@@ -11,12 +12,12 @@ alert = #ED5E84
 teal = #2DD2A3
 
 [bar/main]
-monitor = ${env:MONITOR:DisplayPort-0}
+monitor = ${env:MONITOR:DisplayPort-1}
 width = 100%
 height = 24
 radius = 0.0
 fixed-center = true
-bottom = false
+bottom = true
 
 border-bottom-size = 1
 border-bottom-color = #35363B

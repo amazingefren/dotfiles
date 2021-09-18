@@ -252,6 +252,7 @@ font pango:SF Pro Text 10
 for_window [class=".*"] border pixel 1
 # for_window [class=".*"] floating enable
 hide_edge_borders smart
+smart_gaps on
 
 for_window [window_role="bubble"] floating enable 
 for_window [window_role="task_dialog"] floating enable

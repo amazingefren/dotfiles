@@ -1,17 +1,17 @@
 colors:
-  background_color: '111716'
-  white: 'D2C2AC'
-  red: 'E47C76'
-  green: 'A2E481'
-  yellow: 'E4D481'
-  blue: '67A0E4'
-  pink: '9B67E4'
-  cyan: '67E4A6'
+  background_color: '0D1126'
+  white: 'ACB3D2'
+  red: 'DB7070'
+  green: '82DB70'
+  yellow: 'DBC970'
+  blue: '70C9DB'
+  pink: '9470DB'
+  cyan: '70DBA6'
 
-  black: '1C2624'
-  gray: '798684'
-  darkgray: '798684'
-  darkergray: '798684'
+  black: '000000'
+  gray: '3D4B8F'
+  darkgray: '3B4EAF'
+  darkergray: '344498'
 
 core:
   regular_file: {}
@@ -84,13 +84,13 @@ markup:
 
 programming:
   source:
-    foreground: white
+    foreground: green
 
   tooling:
-    foreground: white
+    foreground: green
 
     continuous-integration:
-      foreground: white
+      foreground: green
 
 media:
   foreground: pink
