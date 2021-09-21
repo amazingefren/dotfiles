@@ -42,6 +42,8 @@ alias alexaturnonthecamera='sudo modprobe v4l2loopback devices=1 video_nr=10 car
 #     nnn -cdEFQx
 # }
 
+alias ta="tmux attach"
+
 runfg(){echo;fg}
 zle -N runfg
 bindkey '^Z' runfg
