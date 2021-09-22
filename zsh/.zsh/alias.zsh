@@ -48,12 +48,12 @@ runfg(){echo;fg}
 zle -N runfg
 bindkey '^Z' runfg
 
-export FZF_DEFAULT_OPTS=$FZF_DEFAULT_OPTS'
---no-bold
---color=dark
---color=fg:-1,bg:-1,hl:#5fff87,fg+:-1,bg+:-1,hl+:#ffaf5f
---color=info:#af87ff,prompt:#5fff87,pointer:#ff87d7,marker:#ff87d7,spinner:#ff87d7
-'
+export FZF_DEFAULT_OPTS=$FZF_DEFAULT_OPTS\
+'--no-bold '\
+'--color=dark '\
+'--color=fg:-1,bg:-1,hl:#5fff87,fg+:-1,bg+:-1,hl+:#ffaf5f '\
+'--color=info:#af87ff,prompt:#5fff87,pointer:#ff87d7,marker:#ff87d7,spinner:#ff87d7 '
+
 
 findfolder(){
   local wheretogo=$(fd . $HOME --full-path -p -c always -H -t d -t l -E .git -E node_modules -E .cache -E .local --max-depth 10 -E .npm -E .rustup| fzf --preview 'exa -a1 {}')
