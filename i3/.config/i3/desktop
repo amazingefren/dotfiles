@@ -33,11 +33,13 @@ bindsym $mod+Shift+r restart
 
 ## Scripts
 # WanabeDWM
-bindsym $mod+Return         exec --no-startup-id $HOME/.config/i3/scripts/i3-send-master
+bindsym $mod+Return             exec --no-startup-id $HOME/.config/i3/scripts/i3-send-master
 # Balance
-bindsym $mod+Tab            exec --no-startup-id $HOME/.config/i3/scripts/i3-balance
+bindsym $mod+Tab                exec --no-startup-id $HOME/.config/i3/scripts/i3-balance
 # 2560 width
-bindsym $mod+g              resize set width 2560
+bindsym $mod+g                  resize set width 2560
+# Toggle Dvorak
+bindsym $mod+Shift+asciitilde   exec --no-startup-id $HOME/Code/dvorakswitch/toggledvorak.sh
 
 ## Applications
 # Terminal
