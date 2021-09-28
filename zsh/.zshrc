@@ -59,7 +59,7 @@ alias ssh="kitty +kitten ssh"
 
 
 if [ -z "${DISPLAY}" ] && [ "$(tty)" = "/dev/tty1" ]; then
-    exec startx
     setxkbmap -layout us -variant dvp
+    exec startx
 fi
 
