@@ -8,13 +8,14 @@ set $term kitty
 # set $menu i3-dmenu-desktop
 set $menu $HOME/.config/rofi/launchers/misc/launcher.sh
 set $browser brave
+set $lock i3lock -c 000000 & sleep 5 && xset dpms force off
 
 ### Autostart ##########################
 exec_always --no-startup-id killall picom; picom -b --experimental-backends &
 exec_always --no-startup-id easyeffects --gapplication-service &
 exec_always --no-startup-id dunst &
 exec_always --no-startup-id killall spotifyd &
-exec_always --no-startup-id $HOME/.config/polybar/launch.sh &
+# exec_always --no-startup-id $HOME/.config/polybar/launch.sh &
 exec_always --no-startup-id spotifyd &
 exec_always --no-startup-id xset r rate 300 60 &
 exec_always --no-startup-id nitrogen --restore &
@@ -216,6 +217,17 @@ bindsym $mod+Shift+g    mode "$mode_gaps"
 ### Customziation ######################
 # Gaps
 gaps inner 8
+
+bar {
+    output primary
+    status_command i3status
+    position top
+}
+
+bar {
+  output nonprimary
+  status_command i3status
+}
 
 # VA Panel Edges Suck
 # workspace $ws1 gaps left 4
