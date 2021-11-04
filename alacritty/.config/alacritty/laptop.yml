@@ -7,7 +7,7 @@ window:
     y: 2
     dynamic_padding: true
 
-# background_opacity: 0.98
+background_opacity: 0.95
 
 Scrolling:
   history: 10000
@@ -15,48 +15,48 @@ Scrolling:
 
 font:
   normal:
-    family: "Iosevka Term"
+    family: "JetbrainsMono Nerd Font Mono"
   bold:
-    family: "Iosevka Term"
+    family: "JetbrainsMono Nerd Font Mono"
     style: Bold
   italic:
-    family: "Iosevka Term"
+    family: "JetbrainsMono Nerd Font Mono"
     style: Italic
   bold_italic:
-    family: "Iosevka Term"
+    family: "JetbrainsMono Nerd Font Mono"
     style: Bold Italic
-  size: 7
+  size: 6
 
 key_bindings: 
   - {key: Back, mods: Control, chars: "\x17"}
 
 colors:
   primary:
-    background: '#0F1D2E'
-    foreground: '#C6C0B9'
+    background: '#111517'
+    foreground: '#D2C2AC'
 
   cursor:
-    cursor: '#C6C0B9'
+    cursor: '#D2C2AC'
     text: '#0F1D2E'
 
   normal:
-    black:   '#152537'
-    red:     '#E48181'
-    green:   '#BBE481'
+    black:   '#808080'
+    red:     '#E47C67'
+    green:   '#A2E481'
     yellow:  '#E4D481'
-    blue:    '#81AEE4'
-    magenta: '#AA81E4'
-    cyan:    '#81E4B3'
+    blue:    '#67A0E4'
+    magenta: '#9B67E4'
+    cyan:    '#67E4A6'
     white:   '#E8E6E3'
 
   bright:
-    black:   '#152537'
-    red:     '#E48181'
-    green:   '#BBE481'
+    black:   '#808080'
+    red:     '#E47C67'
+    green:   '#A2E481'
     yellow:  '#E4D481'
-    blue:    '#81AEE4'
-    magenta: '#AA81E4'
-    cyan:    '#81E4B3'
+    blue:    '#67A0E4'
+    magenta: '#9B67E4'
+    cyan:    '#67E4A6'
     white:   '#E8E6E3'
 
 draw_bold_text_with_bright_colors: false
