@@ -1,0 +1,7 @@
+xmonad/
+xmonad-contrib/
+bin/
+dist/
+dist-newstyle/
+xmonad-*
+.stack-work

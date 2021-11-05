@@ -10,3 +10,23 @@ alacritty/.config/alacritty/alacritty.yml
 picom/.config/picom/picom.conf
 
 i3/.config/i3/config
+
+xmonad/.xmonad/.stack-work/dist/x86_64-linux-tinfo6/Cabal-3.2.1.0/build/my-xmonad/autogen/Paths_my_xmonad.hs
+xmonad/.xmonad/.stack-work/dist/x86_64-linux-tinfo6/Cabal-3.2.1.0/build/my-xmonad/autogen/cabal_macros.h
+xmonad/.xmonad/.stack-work/dist/x86_64-linux-tinfo6/Cabal-3.2.1.0/build-lock
+xmonad/.xmonad/.stack-work/dist/x86_64-linux-tinfo6/Cabal-3.2.1.0/setup-config
+xmonad/.xmonad/.stack-work/dist/x86_64-linux-tinfo6/Cabal-3.2.1.0/stack-cabal-mod
+xmonad/.xmonad/.stack-work/dist/x86_64-linux-tinfo6/Cabal-3.2.1.0/stack-setup-config-mod
+xmonad/.xmonad/.stack-work/ghci/5336f5e3/cabal_macros.h
+xmonad/.xmonad/.stack-work/install/x86_64-linux-tinfo6/1497a02f4a2007ff6762c5c505acd3cceaa303e7df1082e276fc5b357b90b785/8.10.7/pkgdb/package.cache
+xmonad/.xmonad/.stack-work/install/x86_64-linux-tinfo6/1497a02f4a2007ff6762c5c505acd3cceaa303e7df1082e276fc5b357b90b785/8.10.7/pkgdb/package.cache.lock
+xmonad/.xmonad/.stack-work/install/x86_64-linux-tinfo6/21e42cf8d6264344c01f44c01a68e9e1a52a06eaa14aa8f7ad35e07ac487708e/8.10.7/pkgdb/package.cache
+xmonad/.xmonad/.stack-work/install/x86_64-linux-tinfo6/21e42cf8d6264344c01f44c01a68e9e1a52a06eaa14aa8f7ad35e07ac487708e/8.10.7/pkgdb/package.cache.lock
+xmonad/.xmonad/.stack-work/stack.sqlite3
+xmonad/.xmonad/.stack-work/stack.sqlite3.pantry-write-lock
+xmonad/.xmonad/stack.yaml.lock
+xmonad/.xmonad/xmonad.errors
+xmonad/.xmonad/xmonad.hi
+xmonad/.xmonad/xmonad.o
+xmonad/.xmonad/stackbackup.yaml
+xmonad/.xmonad/stackbackup.yaml.lock
