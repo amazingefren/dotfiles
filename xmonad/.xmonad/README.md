@@ -1,0 +1,1 @@
+Cabal/Stack XMonad

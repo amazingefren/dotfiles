@@ -1,0 +1,11 @@
+#/bin/sh
+
+setxkbmap -layout us -variant dvp -option ctrl:nocaps -option altwin:swap_lalt_lwin
+
+if [ -z "$(pgrep picom)" ]; then
+    picom &
+fi
+
+xset r rate 300 60
+
+nitrogen --restore &
