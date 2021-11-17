@@ -15,7 +15,7 @@ exec_always --no-startup-id killall picom; picom -b --experimental-backends &
 exec_always --no-startup-id easyeffects --gapplication-service &
 exec_always --no-startup-id dunst &
 exec_always --no-startup-id killall spotifyd &
-# exec_always --no-startup-id $HOME/.config/polybar/launch.sh &
+exec_always --no-startup-id $HOME/.config/polybar/launch.sh &
 exec_always --no-startup-id spotifyd &
 exec_always --no-startup-id xset r rate 300 60 &
 exec_always --no-startup-id nitrogen --restore &
@@ -39,6 +39,7 @@ bindsym $mod+Return             exec --no-startup-id $HOME/.config/i3/scripts/i3
 bindsym $mod+Tab                exec --no-startup-id $HOME/.config/i3/scripts/i3-balance
 # 2560 width
 bindsym $mod+g                  resize set width 2560
+# bindsym $mod+g                exec --no-startup-id $HOME/.config/i3/scripts/i3-six-teen
 # Toggle Dvorak
 bindsym $mod+Shift+asciitilde   exec --no-startup-id $HOME/Code/dvorakswitch/toggledvorak.sh
 
@@ -218,16 +219,19 @@ bindsym $mod+Shift+g    mode "$mode_gaps"
 # Gaps
 gaps inner 8
 
-bar {
-    output primary
-    status_command i3status
-    position top
-}
-
-bar {
-  output nonprimary
-  status_command i3status
-}
+# bar {
+#     output primary
+#     status_command i3status
+#     position top
+#     mode hide
+#     strip_workspace_numbers yes
+# }
+# 
+# bar {
+#   output nonprimary
+#   status_command i3status
+#   strip_workspace_numbers yes
+# }
 
 # VA Panel Edges Suck
 # workspace $ws1 gaps left 4
