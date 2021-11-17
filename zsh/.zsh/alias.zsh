@@ -23,6 +23,10 @@ md(){
   fi
 }
 
+sht(){
+  curl "cheat.sh/$1" | bat
+}
+
 # alias du="dust"
 # alias find="fd -H"
 # alias fm='vifm'
@@ -33,6 +37,7 @@ alias fuck=b
 alias temps='watch -n.5 "grep \"^[c]pu MHz\" /proc/cpuinfo; echo && sensors k10temp-pci-00c3 amdgpu-pci-2d00"'
 alias um='sudo reflector --verbose --country US --latest 5 --protocol https --sort rate --save /etc/pacman.d/mirrorlist'
 alias alexaturnonthecamera='sudo modprobe v4l2loopback devices=1 video_nr=10 card_label="OBS Cam" exclusive_caps=1'
+alias open='handlr open'
 
 # n ()
 # {
@@ -56,7 +61,7 @@ export FZF_DEFAULT_OPTS=$FZF_DEFAULT_OPTS\
 
 
 findfolder(){
-  local wheretogo=$(fd . $HOME --full-path -p -c always -H -t d -t l -E .git -E node_modules -E .cache -E .local --max-depth 10 -E .npm -E .rustup| fzf --preview 'exa -a1 {}')
+  local wheretogo=$(fd . $HOME --full-path -p -c always -H -t d -t l -E .git -E node_modules -E .cache -E .local --max-depth 10 -E .npm -E .rustup -E .wine | fzf --preview 'exa -a1 {}')
   if [[ ! -z "$wheretogo" ]];then
     cd "$wheretogo"
     zle reset-prompt
