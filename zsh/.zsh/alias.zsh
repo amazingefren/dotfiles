@@ -61,7 +61,7 @@ export FZF_DEFAULT_OPTS=$FZF_DEFAULT_OPTS\
 
 
 findfolder(){
-  local wheretogo=$(fd . $HOME --full-path -p -c always -H -t d -t l -E .git -E node_modules -E .cache -E .local --max-depth 10 -E .npm -E .rustup -E .wine | fzf --preview 'exa -a1 {}')
+  local wheretogo=$(fd . $HOME --full-path -p -c always -H -t d -t l -E .git -E node_modules -E .cache -E .local --max-depth 10 -E .npm -E .rustup -E .wine -E .mozilla -E .jitsi-meet-cfg -E go/pkg -E build -E Packages | fzf --preview 'exa -a1 {}')
   if [[ ! -z "$wheretogo" ]];then
     cd "$wheretogo"
     zle reset-prompt
@@ -70,7 +70,7 @@ findfolder(){
 
 findfile(){
   local file=$(fd . -c always -t f -L --no-ignore -H --max-depth 8 \
-    -E .steam -E .rustup -E node -E .cache -E .zim -E c: -E z: -E proton -E .lock -E SSD -E .nvm -E .asdf -E .local -E .emacs -E .shaders -E .wine -E node_modules -E .yarn -E .git -E .npm -E .cargo \
+    -E .emacs.d -E .mozilla -E .steam -E .rustup -E node -E .cache -E .zim -E c: -E z: -E proton -E .lock -E SSD -E .nvm -E .asdf -E .local -E .emacs -E .shaders -E .wine -E node_modules -E .yarn -E .git -E .npm -E .cargo -E build -E Packages/ \
     | fzf --preview 'bat {} --color always --decorations auto --theme "Dracula" --style rule,numbers')
   if [[ ! -z "$file" ]];then
     vim "$file"
