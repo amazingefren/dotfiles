@@ -24,7 +24,9 @@ md(){
 }
 
 sht(){
-  curl "cheat.sh/$1" | bat
+  curl -s "cheat.sh/$1" | bat --decorations never --color always
+  # tldr $1 | bat -p
+  # {curl -s "cheat.sh/$1" & tldr $1} | bat
 }
 
 # alias du="dust"
@@ -49,36 +51,16 @@ alias open='handlr open'
 
 alias ta="tmux attach"
 
-runfg(){echo;fg}
-zle -N runfg
-bindkey '^Z' runfg
-
 export FZF_DEFAULT_OPTS=$FZF_DEFAULT_OPTS\
 '--no-bold '\
 '--color=dark '\
 '--color=fg:-1,bg:-1,hl:#5fff87,fg+:-1,bg+:-1,hl+:#ffaf5f '\
-'--color=info:#af87ff,prompt:#5fff87,pointer:#ff87d7,marker:#ff87d7,spinner:#ff87d7 '
+'--color=info:#af87ff,prompt:#5fff87,pointer:#ff87d7,marker:#ff87d7,spinner:#ff87d7 '\
+'--bind ctrl-z:ignore '
+zstyle ':edit:*' word-chars '*?\'
 
+bind \
+  '^T' '@. hop' \
+  '^N' '@. hopvim' \
+  '^Z' '+fg'
 
-findfolder(){
-  local wheretogo=$(fd . $HOME --full-path -p -c always -H -t d -t l -E .git -E node_modules -E .cache -E .local --max-depth 10 -E .npm -E .rustup -E .wine -E .mozilla -E .jitsi-meet-cfg -E go/pkg -E build -E Packages | fzf --preview 'exa -a1 {}')
-  if [[ ! -z "$wheretogo" ]];then
-    cd "$wheretogo"
-    zle reset-prompt
-  fi
-}
-
-findfile(){
-  local file=$(fd . -c always -t f -L --no-ignore -H --max-depth 8 \
-    -E .emacs.d -E .mozilla -E .steam -E .rustup -E node -E .cache -E .zim -E c: -E z: -E proton -E .lock -E SSD -E .nvm -E .asdf -E .local -E .emacs -E .shaders -E .wine -E node_modules -E .yarn -E .git -E .npm -E .cargo -E build -E Packages/ \
-    | fzf --preview 'bat {} --color always --decorations auto --theme "Dracula" --style rule,numbers')
-  if [[ ! -z "$file" ]];then
-    vim "$file"
-  fi
-}
-
-zle -N findfolder
-bindkey '^T' findfolder
-
-zle -N findfile
-bindkey '^N' findfile

@@ -35,6 +35,8 @@ zmodule zsh-users/zsh-syntax-highlighting
 zmodule zsh-users/zsh-history-substring-search
 # }}} End configuration added by Zim install
 
+zmodule amazingefren/zsh-edit
+
 zmodule prompt-pwd
 zmodule ssh
 zmodule fzf
