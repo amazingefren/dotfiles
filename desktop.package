@@ -1,0 +1,121 @@
+############################################
+#
+# Temporary List of all of my essential 
+# and or cool packages, I will be using
+# as a reference for my future (Arch Based)
+# package installer scripts, also will be
+# used for me to keep track of cool shit
+#
+# Also need to add gentoo / void stuff
+#
+############################################
+
+# AMD AMF Encoding
+amf-amdgpu-pro
+
+# OBS Vulkan -- Lower Overhead -- AMD ONLY 
+# BREAKING: INSTALLS amf-amdgpu-pro SO UPDATE VK_ICD_FILENAMES TO radeon.*.json (RADV) OR AMDVLK
+obs-vkcapture-git 
+
+### Coding Essentials
+  # Database
+  SQLite (OP)
+  PostgreSQL (POSTGRAPHILE?)
+  MongoDB
+  MySQL
+  # Web Dev
+  Javascript 
+  Node 
+  Typescript 
+  Sass
+  HTTP-Server (or other)
+  Yarn 3 # Type Beat
+  and more tba
+  # Programming
+  GCC (c++ compatability)
+  clang/llvm (GCC but cooler but less compatible?)
+  C
+  Ghidra (Thanks NSA)
+  Go(pher)
+  Rust(up)
+  Haskell (stack/cabal)
+  LaTeX (xelatex)
+  Sumnoko Lua LS (LSP)
+  Pyright (MicroHARD💯😤👌 Python LSP with Types)
+  # DevOps
+  NGINX
+  Docker
+  Vagrant
+  # Tools
+  lazygit
+  neovim-git
+  Github CLI? (don't really use it)
+  git/ssh/sshfs/scp/curl/wget/sed/awk/blah blah blah...
+  alacritty / kitty / st / wezterm... depends on the day
+
+# Unix Essentials
+zsh / fish(?)
+bat
+fzf
+dust
+btop
+
+# Linux Gaming
+proton-ge-custom
+mesa-git + lib32
+vulkan-radeon-git + lib32
+vkd3d for DX12 
+xpadneo
+
+# Rice Cookers
+polybar/tint2/xmobar/i3-bar
+spotify-tui (needs spotifyd)
+taskwarrior-tui?
+calust? (wip)
+
+# Awesome Terminal
+glow
+neofetch and or other fetching stuff
+
+# Awesome GUI
+Qutebrowser
+Brave + vimium
+PDF(IFORGOTWHATGUIIUSEFORTHIS#TODO)
+
+# Awesome System Management
+autorandr
+arandr
+nitrogen
+
+# Awesome Linux
+linux-tkg # My desktop kernel OR RC's ONLY BABYYYYYYYYYYYYY
+  - BMQ Schedular
+  - Tickless Idle
+  - 750hz
+  - Zen3
+systemd-boot > grub # Fuck encrypted /boot/ partitions with grub
+runit > systemd # Systemd is bloat (but its actually really good)
+iwd + (systemd-networkd OR dhcpcd)
+sddm OR xinitrc
+acpid2
+handlr
+rofi
+picom
+pipewire
+
+# My Essentials
+bitwarden
+kde-system-apps (just in case)
+obs
+i3 desktop
+xmonad / dwm laptop ( I really like both )
+easyeffects
+
+# Useful Info
+# Kernel: i915.enable_psr=0 i915.enable_fbc=1
+# MAKEOPTS (especially for gentoo)
+# Parallels for pacman
+# paru/yay for pacman
+# reflector for pacman
+# v4l2 loopback for 'alexaturnonthecamera'
+# chsh.sh
