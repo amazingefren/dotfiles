@@ -52,6 +52,7 @@ export PATH=$PATH:$HOME/go/bin
 # ccache
 export PATH="/usr/lib/ccache/bin/:$PATH"
 # Quick Hack for HLS 9.x (Neovim LSP Installer)
+export PATH="$HOME/.local/bin/:$PATH"
 export PATH="$HOME/.local/share/nvim/lsp_servers/haskell/:$PATH"
 export PATH="$HOME/.ghcup/bin/:$PATH"
 export PATH="$HOME/.zsh/bin/:$PATH"
