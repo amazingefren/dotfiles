@@ -66,3 +66,4 @@ bind \
   '^N' '@. hopvim' \
   '^Z' '+fg'
 
+stty -ixon # Disable XOFF/XON
