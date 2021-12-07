@@ -42,6 +42,7 @@ alias um='sudo reflector --verbose --country US --latest 5 --protocol https --so
 alias alexaturnonthecamera='sudo modprobe v4l2loopback devices=1 video_nr=10 card_label="OBS Cam" exclusive_caps=1'
 alias open='handlr open'
 alias ps="procs"
+alias rmt="rmtrash"
 
 # n ()
 # {

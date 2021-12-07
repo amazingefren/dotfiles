@@ -13,7 +13,6 @@ set $lock i3lock -c 000000 & sleep 5 && xset dpms force off
 ### Autostart ##########################
 exec --no-startup-id autorandr --load default &
 exec_always --no-startup-id killall picom; picom -b --experimental-backends &
-exec_always --no-startup-id easyeffects --gapplication-service &
 exec_always --no-startup-id dunst &
 exec_always --no-startup-id killall spotifyd &
 exec_always --no-startup-id $HOME/.config/polybar/launch.sh &
@@ -22,6 +21,7 @@ exec_always --no-startup-id xset r rate 300 60 &
 # exec_always --no-startup-id nitrogen --restore &
 
 exec_always --no-startup-id setxkbmap -option ctrl:nocaps &
+exec_always --no-startup-id easyeffects --gapplication-service &
 
 ### System #############################
 
