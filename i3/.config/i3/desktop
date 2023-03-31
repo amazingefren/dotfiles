@@ -3,25 +3,22 @@ set $left h
 set $down j
 set $up k
 set $right l
-set $term kitty
+set $term alacritty
 # set $menu "rofi -combi-modi 'drun,window,run' -show combi -modi combi -lines 10 -hide-scrollbar"
-# set $menu i3-dmenu-desktop
-set $menu $HOME/.config/rofi/launchers/misc/launcher.sh
-set $browser brave
+set $menu i3-dmenu-desktop
+set $browser firefox
 set $lock i3lock -c 000000 & sleep 5 && xset dpms force off
 
 ### Autostart ##########################
 exec --no-startup-id autorandr --load default &
-exec_always --no-startup-id killall picom; picom -b --experimental-backends &
+# exec_always --no-startup-id killall picom; picom -b &
 exec_always --no-startup-id dunst &
 exec_always --no-startup-id killall spotifyd &
-exec_always --no-startup-id $HOME/.config/polybar/launch.sh &
 exec_always --no-startup-id spotifyd &
 exec_always --no-startup-id xset r rate 300 60 &
-# exec_always --no-startup-id nitrogen --restore &
+exec_always --no-startup-id nitrogen --restore &
 
-exec_always --no-startup-id setxkbmap -option ctrl:nocaps &
-exec_always --no-startup-id easyeffects --gapplication-service &
+exec_always --no-startup-id setxkbmap us -variant dvorak &
 
 ### System #############################
 
@@ -39,11 +36,11 @@ bindsym $mod+Return             exec --no-startup-id $HOME/.config/i3/scripts/i3
 # Balance
 bindsym $mod+Tab                exec --no-startup-id $HOME/.config/i3/scripts/i3-balance
 # 2560 width
-bindsym $mod+g                  resize set width 2560
-bindsym $mod+Shift+f            resize set width 1600; resize set height 900
+# bindsym $mod+g                  resize set width 2560
+# bindsym $mod+Shift+f            resize set width 1600; resize set height 900
 # bindsym $mod+g                exec --no-startup-id $HOME/.config/i3/scripts/i3-six-teen
 # Toggle Dvorak
-bindsym $mod+Shift+asciitilde   exec --no-startup-id $HOME/Code/dvorakswitch/toggledvorak.sh
+# bindsym $mod+Shift+asciitilde   exec --no-startup-id $HOME/Code/dvorakswitch/toggledvorak.sh
 
 ## Applications
 # Terminal
@@ -71,19 +68,19 @@ bindsym $mod+Shift+$right   move right
 bindsym $mod+Shift+c kill
 
 ### Workspaces #########################
-set $ws1 "1:I"
-set $ws2 "2:II"
-set $ws3 "3:III"
-set $ws4 "4:IV"
-set $ws5 "5:V"
-set $ws6 "6:VI"
-set $ws7 "7:VII"
-set $ws8 "8:VIII"
-set $ws9 "9:IX"
-set $ws0 "10:X"
+set $ws1 1
+set $ws2 2
+set $ws3 3
+set $ws4 4
+set $ws5 5
+set $ws6 6
+set $ws7 7
+set $ws8 8
+set $ws9 9
+set $ws0 10
 
 # Monitor Configuration
-set $main DisplayPort-0
+set $main DisplayPort-2
 set $secondary DisplayPort-1
 
 # Workspace Keybind
@@ -221,19 +218,14 @@ bindsym $mod+Shift+g    mode "$mode_gaps"
 # Gaps
 gaps inner 8
 
-# bar {
-#     output primary
-#     status_command i3status
-#     position top
-#     mode hide
-#     strip_workspace_numbers yes
-# }
-# 
-# bar {
-#   output nonprimary
-#   status_command i3status
-#   strip_workspace_numbers yes
-# }
+bar {
+    status_command bumblebee-status -m cpu memory battery datetime
+    position top
+    colors {
+        background #222222
+        statusline #ffffff
+    }
+}
 
 # VA Panel Edges Suck
 # workspace $ws1 gaps left 4
@@ -253,26 +245,26 @@ gaps inner 8
 # workspace $ws7 gaps right 4
 # workspace $ws8 gaps right 4
 
-workspace $ws9 gaps left 4
-workspace $ws0 gaps left 4
-workspace $ws9 gaps right 4
-workspace $ws0 gaps right 4
+# workspace $ws9 gaps left 4
+# workspace $ws0 gaps left 4
+# workspace $ws9 gaps right 4
+# workspace $ws0 gaps right 4
 
 # Theme -> TODO: Bugsterish
 # class                 border  bground text    indicator child_border
-client.focused          #444444 #222222AA #E8DBC9 #E8DBC9   #D2C2AC
-client.focused_inactive #222222 #111111AA #404040 #FF0000   #222222
-client.unfocused        #222222 #111111AA #404040 #595959   #222222
-client.urgent           #222222 #E47267AA #141414 #E47267   #E47267
-client.placeholder      #222222 #111111AA #D2C2AC #595959   #595959
+client.focused          #444444 #444444 #E8DBC9 #E8DBC9   #444444
+client.focused_inactive #222222 #111111 #404040 #FF0000   #222222
+client.unfocused        #222222 #111111 #666666 #595959   #222222
+client.urgent           #222222 #E47267 #141414 #E47267   #E47267
+client.placeholder      #222222 #111111 #D2C2AC #595959   #595959
 client.background       #333333
 
-font pango:SF Pro Text 10
+font pango:System San Francisco Display 10
 # default_border pixel 2
-for_window [class=".*"] border pixel 1
+for_window [class=".*"] border normal
 # for_window [class=".*"] floating enable
-hide_edge_borders smart
-smart_gaps on
+# hide_edge_borders smart
+# smart_gaps on
 
 for_window [window_role="bubble"] floating enable 
 for_window [window_role="task_dialog"] floating enable
@@ -287,7 +279,7 @@ no_focus [class="steam_app_*"]
 # for_window [instance="^origin.exe$" class="Wine"] floating enable, fullscreen disable
 for_window [class="zoom"] floating enable
 for_window [instance="origin.exe"] floating enable
-assign [class="^origin.exe"] $ws7
-assign [class="^origin"] $ws7
-assign [class="Steam"] $ws5
-assign [class="Skype"] $ws9
+# assign [class="^origin.exe"] $ws7
+# assign [class="^origin"] $ws7
+# assign [class="Steam"] $ws5
+# assign [class="Skype"] $ws9
