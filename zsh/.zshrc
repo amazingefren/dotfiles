@@ -52,6 +52,7 @@ alias lg='lazygit'
 alias ta="tmux attach"
 alias rm='rm -I'
 alias open='handlr open'
+alias ff="fastfetch"
 
 sht(){
   { curl -s "cht.sh/$1" & tldr $1 } | bat --color=always
