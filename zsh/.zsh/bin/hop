@@ -1,6 +1,0 @@
-#!/bin/zsh
-local wheretogo=$(fd . $HOME --full-path -p -c always -H -t d -t l -E .git -E node_modules -E .cache -E .local --max-depth 10 -E .npm -E .rustup -E .wine -E .mozilla -E .jitsi-meet-cfg -E go/pkg -E build -E Packages | fzf --preview 'exa -a1 {}')
-if [[ ! -z "$wheretogo" ]];then
-  cd "$wheretogo"
-fi
-# $SHELL

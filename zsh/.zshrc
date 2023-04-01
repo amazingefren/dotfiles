@@ -1,73 +1,125 @@
-setopt HIST_IGNORE_ALL_DUPS
+# ---------------------------------
+# Plugin Sources
+# ---------------------------------
+ZPLUGINDIR=$HOME/.config/zsh/plugins
+source ./.zsh.plugin
 
-if [[ ! -d "$HOME/.zim" ]]; then
-  curl -fsSL https://raw.githubusercontent.com/zimfw/install/master/install.zsh | zsh
-fi
-
-# if [[ "${VIMRUNTIME}" ]]; then
-#   bindkey -e # Set zsh instance to emacs mode
-#   else
-bindkey -v # fi
-setopt CORRECT
-SPROMPT='zsh: correct %F{red}%R%f to %F{green}%r%f [nyae]? '
-# Remove path separator from WORDCHARS.
-# WORDCHARS=${WORDCHARS//[\/]}
-# Use degit instead of git as the default tool to install and update modules.
-zstyle ':zim:zmodule' use 'degit'
-zstyle ':zim:git' aliases-prefix 'g'
-zstyle ':zim:input' double-dot-expand yes
-
-ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets)
-
-if [[ ! ${ZIM_HOME}/init.zsh -nt ${ZDOTDIR:-${HOME}}/.zimrc ]]; then
-  source ${ZIM_HOME}/zimfw.zsh init -q
-fi
-source ${ZIM_HOME}/init.zsh
-
-bindkey '^[[A' history-substring-search-up
-bindkey '^[[B' history-substring-search-down
-
-zmodload -F zsh/terminfo +p:terminfo
-if [[ -n ${terminfo[kcuu1]} && -n ${terminfo[kcud1]} ]]; then
-  bindkey ${terminfo[kcuu1]} history-substring-search-up
-  bindkey ${terminfo[kcud1]} history-substring-search-down
-fi
-
-bindkey '^P' history-substring-search-up
-bindkey '^N' history-substring-search-down
-bindkey -M vicmd 'k' history-substring-search-up
-bindkey -M vicmd 'j' history-substring-search-down
-
-bindkey '^f' autosuggest-accept
-
-source "$HOME/.zsh/history.zsh"
-source "$HOME/.zsh/alias.zsh"
-# source "$HOME/.zsh/plugins.zsh"
-# source "$HOME/.zsh/compmenu.zsh"
-
+# ---------------------------------
+# ENV
+# ---------------------------------
+export LANG="en_US.UTF-8"
 export EDITOR=/usr/bin/nvim
 export VISUAL=/usr/bin/nvim
-export PATH=$PATH:$HOME/go/bin
+export PAGER=/usr/bin/less
 
-# ccache
-export PATH="/usr/lib/ccache/bin/:$PATH"
-# Quick Hack for HLS 9.x (Neovim LSP Installer)
-export PATH="$HOME/.local/bin/:$PATH"
-export PATH="$HOME/.local/share/nvim/lsp_servers/haskell/:$PATH"
-export PATH="$HOME/.ghcup/bin/:$PATH"
-export PATH="$HOME/.zsh/bin/:$PATH"
-export PATH="/home/amazingefren/.local/share/nvim/lsp_servers/haskell/:$PATH"
-export PATH="/home/amazingefren/.ghcup/bin/:$PATH"
-export PATH="/home/amazingefren/.npm-global/bin/:$PATH"
-export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+# ---------------------------------
+# Zsh
+# ---------------------------------
+autoload -U compinit && compinit -u
+setopt CORRECT
+setopt HIST_IGNORE_ALL_DUPS
 
-# Kitty
-alias ssh="kitty +kitten ssh"
+bindkey -v
+
+stty -ixon # Disable XOFF/XON
+
+# ---------------------------------
+# History
+# ---------------------------------
+export HISTFILE=~/.zsh_history
+export HISTSIZE=20000
+export SAVEHIST=20000
+
+setopt appendhistory
+setopt HIST_VERIFY
+setopt EXTENDED_HISTORY
+setopt HIST_IGNOREALL_DUPS
+setopt HIST_REDUCE_BLANKS
+setopt INC_APPEND_HISTORY
+setopt SHARE_HISTORY
+
+# ---------------------------------
+# Alias
+# ---------------------------------
+alias vim='nvim'
+alias lg='lazygit'
+alias ta="tmux attach"
+alias rm='rm -I'
+alias open='handlr open'
+
+sht(){
+  { curl -s "cht.sh/$1" & tldr $1 } | bat --color=always
+}
 
 
-if [ -z "${DISPLAY}" ] && [ "$(tty)" = "/dev/tty1" ]; then
-    setxkbmap -layout us -variant dvp
-    exec startx
-fi
 
+# ---------------------------------
+# Load Plugins
+# ---------------------------------
+plugins=( # Order First to Last
+  jeffreytse/zsh-vi-mode
+  romkatv/zsh-defer # defer with plugin-load
+  hlissner/zsh-autopair
+  zsh-users/zsh-completions
+  Aloxaf/fzf-tab
+  zsh-users/zsh-history-substring-search
+  zsh-users/zsh-autosuggestions
+  zdharma-continuum/fast-syntax-highlighting
+); plugin-load $plugins
+
+# Plugin Repos
+repos=(
+  ohmyzsh/ohmyzsh
+); plugin-clone $repos
+
+# OMZ lib
+ZSH=$ZPLUGINDIR/ohmyzsh
+for _f in $ZSH/lib/*.zsh; do
+  source $_f
+done
+unset _f
+
+# Plugin source files
+plugins=(
+  ohmyzsh/plugins/magic-enter
+  ohmyzsh/plugins/fancy-ctrl-z
+); plugin-source $plugins
+
+# ---------------------------------
+# FZF & FZF-TAB
+# ---------------------------------
+source /usr/share/fzf/key-bindings.zsh
+source /usr/share/fzf/completion.zsh
+
+FZF_DEFAULT_COMMAND="fd --type f --hidden --follow --exclude .git --exclude node_modules"
+FZF_COMPLETION_TRIGGER='@@'
+FZF_DEFAULT_OPTS="--height 40% --layout=reverse --border --preview-window down:1"
+FZF_ALT_C_COMMAND="fd . $HOME -t d"
+FZF_CTRL_T_COMMAND=$FZF_DEFAULT_COMMAND
+
+bindkey -M emacs '^T' fzf-cd-widget
+bindkey -M vicmd '^T' fzf-cd-widget
+bindkey -M viins '^T' fzf-cd-widget
+
+bindkey -M emacs '\ec' fzf-file-widget
+bindkey -M vicmd '\ec' fzf-file-widget
+bindkey -M viins '\ec' fzf-file-widget
+
+zstyle ':completion:*:git-checkout:*' sort false
+zstyle ':completion:*:descriptions' format '[%d]'
+zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}
+zstyle ':fzf-tab:complete:cd:*' fzf-preview 'exa -1 --color=always $realpath'
+zstyle ':fzf-tab:*' switch-group ',' '.'
+
+
+# ---------------------------------
+# Exa
+# ---------------------------------
+alias ls="exa --group-directories-first -ah"
+alias lsa="ls -a"
+alias lst="ls -T --level 2"
+
+# ---------------------------------
+# Starship Prompt
+# ---------------------------------
+eval "$(starship init zsh)"

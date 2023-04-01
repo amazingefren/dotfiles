@@ -1,8 +1,0 @@
-#!/bin/zsh
-local file=$(fd . -c always -t f -L --no-ignore -H --max-depth 8 \
-  -E .emacs.d -E .mozilla -E .steam -E .rustup -E node -E .cache -E .zim -E c: -E z: -E proton -E .lock -E SSD -E .nvm -E .asdf -E .local -E .emacs -E .shaders -E .wine -E node_modules -E .yarn -E .git -E .npm -E .cargo -E build -E Packages/ \
-  | fzf --preview 'bat {} --color always --decorations auto --theme "Dracula" --style rule,numbers')
-if [[ ! -z "$file" ]];then
-  vim "$file"
-fi
-# $SHELL
