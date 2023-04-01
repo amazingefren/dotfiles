@@ -21,6 +21,10 @@ cmp.setup({
       winhighlight = "Normal:CmpPmenu,CursorLine:CmpSel,Search:PmenuSel",
       scrollbar = false,
       border = border "CmpBorder"
+    },
+    documentation = {
+      border = border "CmpDocBorder",
+      winhighlight = "Normal:CmpDoc"
     }
   },
   sorting = {

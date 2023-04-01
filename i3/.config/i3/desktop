@@ -216,7 +216,7 @@ bindsym $mod+Shift+g    mode "$mode_gaps"
 
 ### Customziation ######################
 # Gaps
-gaps inner 8
+gaps inner 10
 
 bar {
     status_command bumblebee-status -m cpu memory battery datetime
