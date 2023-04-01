@@ -1,4 +1,6 @@
-require'treesitter'.setup {
+local has_treesitter, treesitter = pcall(require, 'treesitter')
+if not has_treesitter then return end
+treesitter.setup {
   highlight = {
     enable = true,
     additional_vim_regex_highlighting = false,

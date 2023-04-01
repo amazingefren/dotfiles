@@ -52,7 +52,7 @@ local plugins = {
 
   { "kdheepak/lazygit.nvim",
     config = function()
-      vim.keymap.set('n', '<leader>lg', '<cmd>:LazyGit<cr>', { silent = true, noremap = true})
+      map('n', '<leader>lg', '<cmd>:LazyGit<cr>')
     end
   },
 
@@ -102,6 +102,8 @@ local plugins = {
     dependencies = {
       'nvim-treesitter/nvim-treesitter-context'
     },
+    priority = 120,
+    lazy = false,
     cmd = 'TSUpdate',
     config = function()
       require'plugins.configs.treesitter'
@@ -177,8 +179,15 @@ local plugins = {
     end
   },
 
-  { 'nvim-telescope/telescope.nvim', dependencies = { 'nvim-lua/plenary.nvim' } },
-  { 'nvim-telescope/telescope-fzf-native.nvim', build = 'make' },
+  { 'nvim-telescope/telescope.nvim',
+    dependencies = {
+      'nvim-lua/plenary.nvim',
+      { 'nvim-telescope/telescope-fzf-native.nvim', build = 'make' }
+    },
+    config = function()
+      require'plugins.configs.telescope'
+    end
+  }
 
 }
 
