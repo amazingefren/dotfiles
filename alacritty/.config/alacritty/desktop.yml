@@ -6,8 +6,7 @@ window:
     x: 0
     y: 0
   dynamic_padding: true
-
-# background_opacity: 0.98
+  opacity: 0.9
 
 Scrolling:
   history: 10000
@@ -27,61 +26,59 @@ font:
     style: Bold Italic
   size: 9
 
-key_bindings: 
+key_bindings:
   - {key: Back, mods: Control, chars: "\x17"}
 
+draw_bold_text_with_bright_colors: false
+
+# Sonokai Default
 colors:
   primary:
-    background: "0x312c2b"
-    foreground: "0xe4e3e1"
+    background: "0x2c2e34"
+    foreground: "0xe2e2e3"
 
   normal:
-    black: "0x1f1e1c"
-    red: "0xf86882"
-    green: "0xa6cd77"
-    yellow: "0xf0c66f"
-    blue: "0x81d0c9"
-    magenta: "0x9fa0e1"
-    cyan: "0xf08d71"
-    white: "0xe4e3e1"
+    black: "0x181819"
+    red: "0xfc5d7c"
+    green: "0x9ed072"
+    yellow: "0xe7c664"
+    blue: "0x76cce0"
+    magenta: "0xb39df3"
+    cyan: "0xf39660"
+    white: "0xe2e2e3"
 
   bright:
-    black: "0x90817b"
-    red: "0xf86882"
-    green: "0xa6cd77"
-    yellow: "0xf0c66f"
-    blue: "0x81d0c9"
-    magenta: "0x9fa0e1"
-    cyan: "0xf08d71"
-    white: "0xe4e3e1"
+    black: "0x7f8490"
+    red: "0xfc5d7c"
+    green: "0x9ed072"
+    yellow: "0xe7c664"
+    blue: "0x76cce0"
+    magenta: "0xb39df3"
+    cyan: "0xf39660"
+    white: "0xe2e2e3"
 
-    # colors:
-    #   primary:
-    #     background: '#0F1D2E'
-    #     foreground: '#C6C0B9'
-    # 
-    #   cursor:
-    #     cursor: '#C6C0B9'
-    #     text: '#0F1D2E'
-    # 
-    #   normal:
-    #     black:   '#152537'
-    #     red:     '#E48181'
-    #     green:   '#BBE481'
-    #     yellow:  '#E4D481'
-    #     blue:    '#81AEE4'
-    #     magenta: '#AA81E4'
-    #     cyan:    '#81E4B3'
-    #     white:   '#E8E6E3'
-    # 
-    #   bright:
-    #     black:   '#152537'
-    #     red:     '#E48181'
-    #     green:   '#BBE481'
-    #     yellow:  '#E4D481'
-    #     blue:    '#81AEE4'
-    #     magenta: '#AA81E4'
-    #     cyan:    '#81E4B3'
-    #     white:   '#E8E6E3'
-
-draw_bold_text_with_bright_colors: false
+# Sonokai Espresso
+# colors:
+#   primary:
+#     background: "0x312c2b"
+#     foreground: "0xe4e3e1"
+#
+#   normal:
+#     black: "0x1f1e1c"
+#     red: "0xf86882"
+#     green: "0xa6cd77"
+#     yellow: "0xf0c66f"
+#     blue: "0x81d0c9"
+#     magenta: "0x9fa0e1"
+#     cyan: "0xf08d71"
+#     white: "0xe4e3e1"
+#
+#   bright:
+#     black: "0x90817b"
+#     red: "0xf86882"
+#     green: "0xa6cd77"
+#     yellow: "0xf0c66f"
+#     blue: "0x81d0c9"
+#     magenta: "0x9fa0e1"
+#     cyan: "0xf08d71"
+#     white: "0xe4e3e1"
