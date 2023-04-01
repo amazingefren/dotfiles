@@ -11,7 +11,6 @@ set $lock i3lock -c 000000 & sleep 5 && xset dpms force off
 
 ### Autostart ##########################
 exec --no-startup-id autorandr --load default &
-exec_always --no-startup-id killall picom; picom -b &
 exec_always --no-startup-id dunst &
 exec_always --no-startup-id killall spotifyd &
 exec_always --no-startup-id spotifyd &
@@ -19,6 +18,7 @@ exec_always --no-startup-id xset r rate 300 60 &
 exec_always --no-startup-id nitrogen --restore &
 
 exec_always --no-startup-id setxkbmap us -variant dvorak &
+exec_always --no-startup-id killall picom; picom -b &
 
 ### System #############################
 
@@ -32,15 +32,15 @@ bindsym $mod+Shift+r restart
 
 ## Scripts
 # WanabeDWM
-bindsym $mod+Return             exec --no-startup-id $HOME/.config/i3/scripts/i3-send-master
+bindsym $mod+Return         exec --no-startup-id $HOME/.config/i3/scripts/i3-send-master
 # Balance
-bindsym $mod+Tab                exec --no-startup-id $HOME/.config/i3/scripts/i3-balance
+bindsym $mod+Tab            exec --no-startup-id $HOME/.config/i3/scripts/i3-balance
 # Toggle Dvorak
-bindsym $mod+asciitilde   exec --no-startup-id $HOME/.config/i3/scripts/toggle-dvorak
+bindsym $mod+asciitilde     exec --no-startup-id $HOME/.config/i3/scripts/toggle-dvorak
 # 2560 width
-# bindsym $mod+g                  resize set width 2560
-# bindsym $mod+Shift+f            resize set width 1600; resize set height 900
-# bindsym $mod+g                exec --no-startup-id $HOME/.config/i3/scripts/i3-six-teen
+# bindsym $mod+g            resize set width 2560
+# bindsym $mod+Shift+f      resize set width 1600; resize set height 900
+# bindsym $mod+g            exec --no-startup-id $HOME/.config/i3/scripts/i3-six-teen
 
 ## Applications
 # Terminal
