@@ -50,6 +50,12 @@ local plugins = {
     end
   },
 
+  { "kdheepak/lazygit.nvim",
+    config = function()
+      vim.keymap.set('n', '<leader>lg', '<cmd>:LazyGit<cr>', { silent = true, noremap = true})
+    end
+  },
+
   "jose-elias-alvarez/null-ls.nvim", -- Lint & Format
   "folke/trouble.nvim", -- Trouble Menu
 

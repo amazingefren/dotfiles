@@ -1,3 +1,4 @@
+vim.g.mapleader = ' '
 map("n", "<Space>", "<NOP>")
 
 -- map("n", "<C-h>", "<C-w>h", opts)
