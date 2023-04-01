@@ -95,7 +95,7 @@ plugins=(
 source /usr/share/fzf/key-bindings.zsh
 source /usr/share/fzf/completion.zsh
 
-FZF_COMPLETION_DIR_COMMANDS="cd pushd tree"
+FZF_COMPLETION_DIR_COMMANDS="cd pushd"
 FZF_DEFAULT_COMMAND="fd --type f --hidden --follow --exclude .git --exclude node_modules"
 FZF_COMPLETION_TRIGGER='@@'
 FZF_DEFAULT_OPTS="--height 40% --layout=reverse --border --preview-window down:1"
