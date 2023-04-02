@@ -15,10 +15,10 @@ exec_always --no-startup-id dunst &
 exec_always --no-startup-id killall spotifyd &
 exec_always --no-startup-id spotifyd &
 exec_always --no-startup-id xset r rate 300 60 &
-exec_always --no-startup-id nitrogen --restore &
 
 exec_always --no-startup-id setxkbmap us -variant dvorak &
 exec_always --no-startup-id picom -b &
+# exec_always --no-startup-id nitrogen --restore &
 
 ### System #############################
 
