@@ -7,7 +7,8 @@ set $term alacritty
 # set $menu "rofi -combi-modi 'drun,window,run' -show combi -modi combi -lines 10 -hide-scrollbar"
 set $menu i3-dmenu-desktop
 set $browser firefox
-set $lock i3lock -c 000000 & sleep 5 && xset dpms force off
+# set $lock i3lock -c 000000 & sleep 5 && xset dpms force off
+set $lock betterlockscreen -l
 
 ### Autostart ##########################
 exec --no-startup-id autorandr --load default &
