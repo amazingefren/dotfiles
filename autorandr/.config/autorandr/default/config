@@ -16,9 +16,9 @@ x-prop-underscan_hborder 0
 x-prop-underscan_vborder 0
 output DisplayPort-2
 crtc 1
-mode 2560x1440
-pos 1280x1440
-rate 170.07
+mode 1920x1080
+pos 1600x1440
+rate 359.75
 x-prop-max_bpc 8
 x-prop-non_desktop 0
 x-prop-scaling_mode None
