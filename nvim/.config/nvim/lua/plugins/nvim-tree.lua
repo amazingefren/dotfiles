@@ -2,7 +2,7 @@ return {
   "nvim-tree/nvim-tree.lua",
   dependencies = { "echasnovski/mini.icons" },
   keys = {
-    { "<C-/>", "<CMD>NvimTreeToggle<CR>", desc = "Toggle Nvim-Tree"}
+    { "<C-s>", "<CMD>NvimTreeToggle<CR>", desc = "Toggle Nvim-Tree"}
   },
   opts = function ()
     local function my_on_attach(bufnr)

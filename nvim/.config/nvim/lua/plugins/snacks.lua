@@ -68,8 +68,8 @@ return {
     -- Other
     { "<leader>z",  function() Snacks.zen() end, desc = "Toggle Zen Mode" },
     { "<leader>Z",  function() Snacks.zen.zoom() end, desc = "Toggle Zoom" },
-    { "<C-s>",  function() require("snacks").scratch() end, desc = "Toggle Scratch Buffer" },
-    { "<C-S-s>",  function() require("snacks").scratch.select() end, desc = "Select Scratch Buffer" },
+    -- { "<C-s>",  function() require("snacks").scratch() end, desc = "Toggle Scratch Buffer" },
+    -- { "<C-S-s>",  function() require("snacks").scratch.select() end, desc = "Select Scratch Buffer" },
     { "<leader>bd", function() Snacks.bufdelete() end, desc = "Delete Buffer" },
     { "<c-`>",      function() Snacks.terminal() end, desc = "Toggle Terminal", mode = { "n", "t" } },
     { "]]",         function() Snacks.words.jump(vim.v.count1) end, desc = "Next Reference", mode = { "n", "t" } },
