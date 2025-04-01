@@ -41,7 +41,8 @@ end)
 local config = wezterm.config_builder()
 
 config.max_fps = 120
-config.font = wezterm.font { family = "TX02 Nerd Font" }
+config.font = wezterm.font { family = "TX02 Nerd Font", italic = false }
+config.harfbuzz_features = {"calt=0", "clig=0", "liga=0"}
 config.font_size = 12
 config.line_height = 1.0
 config.freetype_load_target = "Normal"

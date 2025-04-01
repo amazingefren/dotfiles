@@ -1,6 +1,6 @@
 return {
   "nvim-tree/nvim-tree.lua",
-  event = "VeryLazy",
+  dependencies = { "echasnovski/mini.icons" },
   keys = {
     { "<C-/>", "<CMD>NvimTreeToggle<CR>", desc = "Toggle Nvim-Tree"}
   },

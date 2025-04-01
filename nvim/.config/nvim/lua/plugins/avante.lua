@@ -6,7 +6,7 @@ return {
   version = false, -- Set this to "*" to always pull the latest release version, or set it to false to update to the latest code changes.
   keys = function ()
     return {
-      {"<leader>ai", ":AvanteToggle<CR>", desc = "Toggle Avante"}
+      {"<C-b>", "<CMD>AvanteToggle<CR>", mode = {"n", "i", "v"}, desc = "Toggle Avante"}
       -- {
         --   "<leader>ac",
         --   function()
@@ -33,6 +33,14 @@ return {
           -- auto_suggestions_provider = "copilot",
           copilot = {
             model = "claude-3.7-sonnet",
+            -- model = "gpt-4o",         -- GPT-4o (default)
+            -- model = "claude-3.5-sonnet", -- Claude Sonnet 3.5
+            -- model = "gemini-2.0-flash", -- Gemini 2.0 Flash
+            -- model = "o1",              -- o1
+            -- model = "o3-mini",         -- o3-mini
+            -- Available models for Copilot Code Completion:
+            -- model = "gpt-3.5-turbo",  -- GPT-3.5 Turbo (default for code completion)
+            -- model = "gpt-4o-mini",    -- GPT-4o-mini
           },
 
           web_search_engine = {
