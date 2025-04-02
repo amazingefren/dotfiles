@@ -53,10 +53,19 @@ return {
 
         -- ['<Tab>'] = { 'snippet_forward', 'fallback' },
         ['<Tab>'] = {
-          function(cmp)
-            if cmp.snippet_active() then return cmp.accept()
-            else return cmp.select_and_accept() end
-          end,
+          -- function(cmp)
+          --
+          --   if cmp.snippet_active() then return cmp.accept()
+          --
+          --   if not cmp.is_visible() then return end
+          --   local completion_list = require('blink.cmp.completion.list')
+          --   if completion_list.selected_item_idx then
+          --     cmp.select_and_accept()
+          --     return true
+          --   else
+          --     return false
+          --   end
+          -- end,
           'snippet_forward',
           'fallback'
         },
