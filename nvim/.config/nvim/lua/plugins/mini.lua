@@ -26,4 +26,5 @@ return {
 { "echasnovski/mini.tabline", opts = {} },
 { "echasnovski/mini.trailspace", opts = {} },
 { "echasnovski/mini.pick", opts = {} },
+{ "echasnovski/mini.jump", opts = {} },
 }

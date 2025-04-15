@@ -8,7 +8,8 @@ return {
     explorer = { enabled = true },
     indent = { enabled = false },
     input = { enabled = true },
-    picker = { enabled = true, layout = "default", hidden=true },
+    -- picker = { enabled = true, layout = "default", hidden=true, formatters = { file = { filename_first = true } } },
+    picker = { enabled = true, layout = "bottom", hidden=true, formatters = { file = { filename_first = true } } },
     notifier = { enabled = true },
     quickfile = { enabled = true },
     scope = { enabled = true },
@@ -40,7 +41,9 @@ return {
     -- Grep
     { "<leader>sb", function() Snacks.picker.lines() end, desc = "Buffer Lines" },
     { "<leader>sB", function() Snacks.picker.grep_buffers() end, desc = "Grep Open Buffers" },
-    { "<leader>sw", function() Snacks.picker.grep_word() end, desc = "Visual selection or word", mode = { "n", "x" } },
+    -- { "<leader>sw", function() Snacks.picker.grep_word() end, desc = "Visual selection or word", mode = { "n", "x" } },
+    { "<leader>fg", function() Snacks.picker.grep_word() end, desc = "Visual selection", mode = { "x" } },
+    { "*", function() Snacks.picker.grep_word() end, desc = "Visual selection", mode = { "n" } },
     -- search
     { '<leader>s"', function() Snacks.picker.registers() end, desc = "Registers" },
     -- { '<leader>s/', function() Snacks.picker.search_history() end, desc = "Search History" },

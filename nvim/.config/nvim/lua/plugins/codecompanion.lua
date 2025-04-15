@@ -8,8 +8,9 @@
 --   "anthropic/claude-3.5-sonnet",
 --   "openai/gpt-4o-mini",
 -- }
-local default_model = "openrouter/quasar-alpha"
+-- local default_model = "openrouter/quasar-alpha"
 -- local default_inline_model = "google/gemini-2.0-flash-001"
+local default_model = "google/gemini-2.0-flash-001"
 
 return {
   "olimorris/codecompanion.nvim",
@@ -19,6 +20,7 @@ return {
     "nvim-lua/plenary.nvim",
     "nvim-treesitter/nvim-treesitter",
     "j-hui/fidget.nvim",
+    "nvim-telescope/telescope.nvim",
   },
 
   keys = function ()
@@ -106,9 +108,12 @@ return {
       },
       display = {
         chat = {
+          -- show_settings = true,
           window = {
-            layout = "float",
-            width = 0.8,
+            layout = "horizontal",
+            position = "bottom",
+            height = 0.35
+            -- width = 0.8,
           }
         },
         diff = {
