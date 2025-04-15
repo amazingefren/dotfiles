@@ -20,7 +20,7 @@ return {
     "nvim-lua/plenary.nvim",
     "nvim-treesitter/nvim-treesitter",
     "j-hui/fidget.nvim",
-    "nvim-telescope/telescope.nvim",
+    -- "nvim-telescope/telescope.nvim",
   },
 
   keys = function ()
