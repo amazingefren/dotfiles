@@ -26,8 +26,8 @@ map("n", "<C-Left>", ":vertical resize +2<CR>", "Increase window width")
 map("n", "<C-Right>", ":vertical resize -2<CR>", "Decrease window width")
 
 -- Navigate buffers
-map("n", "<S-l>", ":bnext<CR>", "Next buffer")
-map("n", "<S-h>", ":bprevious<CR>", "Previous buffer")
+-- map("n", "<S-l>", ":bnext<CR>", "Next buffer")
+-- map("n", "<S-h>", ":bprevious<CR>", "Previous buffer")
 
 -- Stay in indent mode
 map("v", "<", "<gv", "Decrease indent")
