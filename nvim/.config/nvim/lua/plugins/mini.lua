@@ -23,7 +23,7 @@ return {
 { "echasnovski/mini.splitjoin", opts = {} },
 { "echasnovski/mini.surround", opts = {} },
 -- { "echasnovski/mini.statusline", opts = {} },
-{ "echasnovski/mini.tabline", opts = {} },
+-- { "echasnovski/mini.tabline", opts = {} },
 { "echasnovski/mini.trailspace", opts = {} },
 { "echasnovski/mini.pick", opts = {} },
 { "echasnovski/mini.jump", opts = {} },
