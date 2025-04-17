@@ -29,7 +29,7 @@ return {
     { "<leader>fc", function() Snacks.picker.files({ cwd = vim.fn.stdpath("config") }) end, desc = "Find Config File" },
     { "<leader>fp", function() Snacks.picker.projects() end, desc = "Projects" },
     -- git
-    { "<leader>gg", function() Snacks.lazygit() end, desc = "Lazygit" },
+    { "<leader>lg", function() Snacks.lazygit() end, desc = "Lazygit" },
     { "<leader>gb", function() Snacks.git.blame_line() end, desc = "Git Blame Line" },
     { "<leader>gB", function() Snacks.picker.git_branches() end, desc = "Git Branches" },
     { "<leader>gl", function() Snacks.picker.git_log() end, desc = "Git Log" },

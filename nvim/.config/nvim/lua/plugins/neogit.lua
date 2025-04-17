@@ -7,6 +7,6 @@ return {
     "echasnovski/mini.pick",
   },
   keys = {
-    { "<leader>lg", "<cmd>Neogit<cr>", desc = "Open Neogit" },
+    { "<leader>gg", "<cmd>Neogit<cr>", desc = "Open Neogit" },
   }
 }
