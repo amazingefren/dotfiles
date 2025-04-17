@@ -9,7 +9,7 @@ return {
     indent = { enabled = false },
     input = { enabled = true },
     -- picker = { enabled = true, layout = "default", hidden=true, formatters = { file = { filename_first = true } } },
-    picker = { enabled = true, layout = "bottom", hidden=true, formatters = { file = { filename_first = true } } },
+    picker = { enabled = true, layout = "bottom", hidden = true, formatters = { file = { filename_first = true } } },
     notifier = { enabled = true },
     quickfile = { enabled = true },
     scope = { enabled = true },
@@ -24,7 +24,7 @@ return {
     { "<leader>n", function() Snacks.picker.notifications() end, desc = "Notification History" },
     -- find
     { "<leader>ff", function() Snacks.picker.files() end, desc = "Find Files" },
-    { "<leader>fb", function() Snacks.picker.buffers() end, desc = "Buffers" },
+    { "<C-n>", function() Snacks.picker.buffers() end, desc = "Buffers" },
     { "<leader>fg", function() Snacks.picker.grep() end, desc = "Grep" },
     { "<leader>fc", function() Snacks.picker.files({ cwd = vim.fn.stdpath("config") }) end, desc = "Find Config File" },
     { "<leader>fp", function() Snacks.picker.projects() end, desc = "Projects" },
