@@ -17,7 +17,7 @@ opt.smartcase = true
 opt.hidden = true
 opt.splitbelow = true
 opt.splitright = true
--- opt.laststatus = 3
+opt.laststatus = 3
 opt.fillchars = { eob = " " }
 opt.numberwidth = 2
 
