@@ -9,4 +9,4 @@ require("core.keymaps")
 require("core.diagnostics")
 
 -- vim.cmd[[ colorscheme modus_vivendi ]]
-vim.cmd[[ colorscheme lackluster-hack ]]
+-- vim.cmd[[ colorscheme lackluster-hack ]]
