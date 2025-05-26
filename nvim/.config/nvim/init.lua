@@ -10,3 +10,6 @@ require("core.diagnostics")
 
 -- vim.cmd[[ colorscheme modus_vivendi ]]
 -- vim.cmd[[ colorscheme lackluster-hack ]]
+-- vim.cmd[[ colorscheme darkvoid ]]
+-- vim.cmd[[ colorscheme zenwritten ]]
+vim.cmd[[ colorscheme ashen ]]
