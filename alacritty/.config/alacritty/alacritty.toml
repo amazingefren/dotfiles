@@ -36,7 +36,7 @@ dynamic_padding = true
 
 [general]
 # import = ["~/.config/alacritty/themes/ef-bio.toml"]
-import = ["~/.config/alacritty/themes/ashen.toml"]
+import = ["~/.config/alacritty/themes/oxocarbon.toml"]
 # opacity = 0.9
 #
 # [window.padding]

@@ -1,4 +1,8 @@
 if status is-interactive
+   if test -f ~/.fishenv
+      source ~/.fishenv
+   end
+
    alias ls eza
    alias la 'eza -a'
    alias ll 'eza -l'
