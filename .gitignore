@@ -36,3 +36,4 @@ fish/.config/fish/conf.d/
 fish/.config/fish/themes/
 fish/.config/fish/completions/
 fish/.config/fish/fish_variables
+/emacs/.config/emacs/eln-cache/

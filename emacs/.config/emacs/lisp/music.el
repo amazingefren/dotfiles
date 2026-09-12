@@ -1,22 +1,4 @@
-;;; music.el --- Spotify via spot (consult-based)  -*- lexical-binding: t -*-
-;;
-;; spot (github.com/chiply/spot) searches Spotify through the same picker as
-;; everything else: type, narrow, RET plays on your active device, C-. for
-;; embark actions (play, queue, show album, add to playlist). It also puts the
-;; current track in the mode line.
-;;
-;; Credentials come from 1Password the first time Spotify is used in a session
-;; (see `secret-op'), never from this file. The refresh token is kept in an
-;; encrypted plstore in the cache, so authorizing is a one-time thing.
-;;
-;;   SPC o s s   search tracks, albums, artists, playlists (shows etc. via -- --type=show)
-;;   SPC o s l   my playlists          SPC o s +   add current track to a playlist
-;;   SPC o s p   play    SPC o s P   pause    SPC o s n   next    SPC o s b   previous
-;;   SPC o s d   pick the device to play on (asked automatically when none is active)
-;;   In results: RET plays (or opens a playlist), C-. for more actions (queue, album, add to playlist)
-;;   SPC o s a   authorize (first time only; paste the code from the browser's URL)
-;;
-;; In the search prompt, " -- --limit=10 --market=US" style args go after the query.
+;;; music.el --- Spotify via Spot  -*- lexical-binding: t -*-
 
 (use-package spot
   :vc (:url "https://github.com/chiply/spot" :rev :newest)
@@ -93,8 +75,8 @@
   ;; Client id/secret from 1Password, on first need.
   (defun music--load-credentials ()
     (unless spot-client-id
-      (setq spot-client-id (secret-op "op://Private/Spotify/Emacs Smudge Creds/Client ID")
-            spot-client-secret (secret-op "op://Private/Spotify/Emacs Smudge Creds/Client Secret"))))
+      (setq spot-client-id (op-secret 'spotify-client-id)
+            spot-client-secret (op-secret 'spotify-client-secret))))
   (advice-add 'spot--id-secret :before #'music--load-credentials)      ; token exchange / refresh
   (advice-add 'spot--auth-url-full :before #'music--load-credentials)  ; the authorize URL
 
@@ -113,6 +95,8 @@
   (require 'plstore)
   (defvar music--token-store (no-littering-expand-var-file-name "spot.plstore"))
   (defun music--save-refresh-token (token)
+    (unless (security-plstore-key-available-p)
+      (error "No local encryption key; run SPC o s a to create one before authorizing"))
     (let ((store (plstore-open music--token-store)))
       (plstore-put store "spotify" nil `(:secret-refresh-token ,token))
       (plstore-save store)
@@ -161,7 +145,11 @@ Done on first use rather than at startup so Spotify only asks 1Password when you
 (music-defcommand music-pause "Pause." (spot-player-pause))
 (music-defcommand music-next "Next track." (spot-player-next))
 (music-defcommand music-previous "Previous track." (spot-player-previous))
-(music-defcommand music-authorize "Authorize Spotify (one time)." (spot-authorize))
+(music-defcommand music-authorize "Authorize Spotify."
+  (security-ensure-plstore-key)
+  (spot-authorize))
+
+;;; Keybindings
 
 (leader
   "os"  '(:ignore t :wk "spotify")

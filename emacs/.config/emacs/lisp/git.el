@@ -26,10 +26,7 @@
     (interactive)
     (magit-diff-range (format "%s...HEAD" (or (magit-main-branch) "main")))))
 
-;; forge: GitHub issues and pull requests inside magit. Token comes from
-;; ~/.authinfo (machine api.github.com login <user>^forge password <token>).
-;; In magit status: ' opens the forge menu; N p creates a PR, N i an issue.
-;; SPC g p lists PRs, SPC g i issues, for the repo of the current file.
+;; Forge reads its GitHub token from ~/.authinfo.
 (use-package forge
   :after magit
   :custom
@@ -48,6 +45,8 @@
   (require 'diff-hl-show-hunk)  ; the unfold command and its inline popup aren't autoloaded
   (require 'diff-hl-show-hunk-inline)
   (global-diff-hl-show-hunk-mouse-mode 1))  ; click a fringe mark to unfold its diff
+
+;;; Keybindings
 
 (leader
   "g"  '(:ignore t :wk "git")

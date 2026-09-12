@@ -1,14 +1,4 @@
-;;; themes.el --- themes, live preview, and remembering the choice  -*- lexical-binding: t -*-
-;;
-;; SPC h r t previews themes on the whole frame as you move through the list;
-;; RET keeps one, C-g restores the old one. The pick is saved and restored on
-;; the next start, so this file never needs editing to change theme.
-;;
-;; Collections installed:
-;;   modus-*   built in: vivendi, operandi, plus -tinted and -deuteranopia variants
-;;   ef-*      same author, 30+ softer variants (ef-dream, ef-night, ef-elea-dark...)
-;;   doom-*    the popular set: doom-one, doom-tokyo-night, doom-gruvbox, doom-nord...
-;;   catppuccin  set `catppuccin-flavor' to mocha / macchiato / frappe / latte
+;;; themes.el --- themes and persisted theme selection  -*- lexical-binding: t -*-
 
 (use-package ef-themes)
 (use-package doom-themes

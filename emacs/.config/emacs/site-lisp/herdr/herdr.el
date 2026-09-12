@@ -52,9 +52,11 @@
   "Agent kinds offered by `herdr-start'.  Must be kinds herdr knows (see `herdr agent start --help')."
   :type '(repeat string))
 
-(defcustom herdr-default-kind "claude"
-  "Agent kind `herdr-start' uses without a prefix argument."
-  :type 'string)
+(defcustom herdr-default-kind nil
+  "Agent kind `herdr-start' uses without a prefix argument.
+When nil, ask on first use and save the choice in `custom-file'."
+  :type '(choice (const :tag "Ask on first use" nil)
+                 (string :tag "Agent kind")))
 
 (defcustom herdr-poll-interval 2
   "Seconds between agent state polls while `herdr-mode' is on."
@@ -65,7 +67,7 @@
   :type 'number)
 
 (defcustom herdr-notify t
-  "Show a macOS notification when an agent goes from working to needing you."
+  "Show a desktop notification when an agent needs attention."
   :type 'boolean)
 
 (defface herdr-working '((t :inherit success)) "Glyph for a working agent.")
@@ -171,6 +173,21 @@ Prompts with the running sessions plus a fresh one named after the workspace."
 (defun herdr--agent-names (session)
   (mapcar (lambda (a) (alist-get 'name a)) (herdr--agents session)))
 
+(defun herdr-set-default-kind (kind)
+  "Use KIND as the default agent kind on this machine."
+  (interactive
+   (list (completing-read "Default agent: " herdr-agent-kinds nil t nil nil
+                          herdr-default-kind)))
+  (customize-save-variable 'herdr-default-kind kind)
+  (message "Herdr default agent is now %s" kind)
+  kind)
+
+(defun herdr--default-kind ()
+  "Return the configured default agent kind, asking once when needed."
+  (or herdr-default-kind
+      (herdr-set-default-kind
+       (completing-read "Default agent: " herdr-agent-kinds nil t))))
+
 (defun herdr--status-glyph (status)
   (pcase status
     ("working"  (propertize "●" 'face 'herdr-working))
@@ -205,7 +222,7 @@ with C-u both are asked."
    (let* ((session (herdr--session))
           (kind (if current-prefix-arg
                     (completing-read "Agent: " herdr-agent-kinds nil t nil nil herdr-default-kind)
-                  herdr-default-kind))
+                  (herdr--default-kind)))
           (taken (herdr--agent-names session))
           (default (cl-loop for i from 1
                             for n = (if (= i 1) kind (format "%s-%d" kind i))
@@ -320,16 +337,20 @@ Also copied to the clipboard.  Point stays in the source buffer."
     (herdr--poll)
     (message "Renamed %s -> %s" name new-name)))
 
+(defun herdr--kill (session name)
+  "Close NAME's pane in SESSION and its attach buffer."
+  (herdr--run session "pane" "close" (herdr--pane session name))
+  (when-let* ((b (get-buffer (herdr--buffer-name session name))))
+    (let ((kill-buffer-query-functions nil)) (kill-buffer b)))
+  (herdr--poll))
+
 ;;;###autoload
 (defun herdr-kill (name)
   "Close agent NAME's pane (this ends the agent) and its attach buffer."
   (interactive (list (herdr--read-agent (herdr--session) "Kill agent: ")))
   (let ((session (herdr--session)))
     (when (yes-or-no-p (format "Kill agent %s in %s? " name session))
-      (herdr--run session "pane" "close" (herdr--pane session name))
-      (when-let* ((b (get-buffer (herdr--buffer-name session name))))
-        (let ((kill-buffer-query-functions nil)) (kill-buffer b)))
-      (herdr--poll))))
+      (herdr--kill session name))))
 
 ;;;; Polling and tab-bar glyphs
 
@@ -366,9 +387,17 @@ Also copied to the clipboard.  Point stays in the source buffer."
 
 (defun herdr--notify (title body)
   (message "[herdr] %s: %s" title body)
-  (when (eq system-type 'darwin)
-    (ignore-errors
-      (do-applescript (format "display notification %S with title %S" body title)))))
+  ;; Use a separate User Notifications helper instead of AppleScript. The
+  ;; latter makes macOS ask Emacs for cross-application AppleEvents access.
+  (when-let* ((notifier (executable-find "terminal-notifier"))
+              (process
+               (start-process
+                (format "herdr-notifier-%s" (float-time)) nil notifier
+                "-title" title
+                "-message" body
+                "-sender" "org.gnu.Emacs"
+                "-activate" "org.gnu.Emacs")))
+    (set-process-query-on-exit-flag process nil)))
 
 (defun herdr-workspace-glyph (workspace)
   "Tab-bar glyph for WORKSPACE from its session's agent states, e.g. \"●2◆1\"."
@@ -392,6 +421,7 @@ Also copied to the clipboard.  Point stays in the source buffer."
     (define-key map (kbd "RET") #'herdr-overview-visit)
     (define-key map (kbd "g") #'herdr-overview-refresh)
     (define-key map (kbd "r") #'herdr-overview-rename)
+    (define-key map (kbd "x") #'herdr-overview-kill)
     map))
 
 (defun herdr-overview-rename ()
@@ -402,6 +432,14 @@ Also copied to the clipboard.  Point stays in the source buffer."
       (herdr--run session "agent" "rename" name new)
       (when-let* ((b (get-buffer (herdr--buffer-name session name))))
         (with-current-buffer b (rename-buffer (herdr--buffer-name session new))))
+      (herdr-overview-refresh))))
+
+(defun herdr-overview-kill ()
+  "Kill the agent on this line after confirmation."
+  (interactive)
+  (pcase-let ((`(,_workspace ,session ,name) (tabulated-list-get-id)))
+    (when (yes-or-no-p (format "Kill agent %s in %s? " name session))
+      (herdr--kill session name)
       (herdr-overview-refresh))))
 
 (define-derived-mode herdr-overview-mode tabulated-list-mode "herdr"

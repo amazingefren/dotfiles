@@ -1,9 +1,4 @@
-;;; modeline.el --- a quieter mode line  -*- lexical-binding: t -*-
-;;
-;; doom-modeline, text only (no icon font needed). Left: evil state, workspace,
-;; file name relative to the project, modified flag, position. Right: flymake
-;; error/warning counts, LSP status, git branch, major mode, and the Spotify
-;; track from spot. Minor modes are hidden; SPC h m lists them.
+;;; modeline.el --- a quiet text-only mode line  -*- lexical-binding: t -*-
 
 (use-package doom-modeline
   :custom

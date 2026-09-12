@@ -26,6 +26,7 @@
 ;; lisp/ is deliberately NOT on load-path, so a file called vim.el or git.el
 ;; can never shadow a real package with that name. To add a module, add a
 ;; file and put its name in this list.
-(dolist (file '("defaults" "themes" "modeline" "vim" "pickers" "lang" "git" "notes"
-                "workspaces" "feeds" "browser" "tree" "shell" "music" "agents" "home"))
+(dolist (file '("defaults" "packages" "environment" "session" "security" "editing" "op"
+                "themes" "modeline" "vim" "pickers" "workspaces" "browser" "writing" "lang"
+                "git" "feeds" "tree" "terminal" "windows" "music" "agents" "home"))
   (load (expand-file-name (concat "lisp/" file) user-emacs-directory) nil 'nomessage))

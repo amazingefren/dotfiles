@@ -1,8 +1,6 @@
 ;;; tree.el --- file tree sidebar  -*- lexical-binding: t -*-
 
-;; treemacs: project file tree on the left. SPC e toggles it, SPC E jumps to
-;; the current file in it. Inside: j/k move, RET or l opens, h collapses,
-;; cf new file, cd new directory, R rename, d delete, ? shows all keys.
+;; Treemacs is the workspace file tree.
 (use-package treemacs
   :commands (treemacs treemacs-select-window treemacs-find-file)
   :custom
@@ -55,6 +53,8 @@
         (treemacs-do-remove-project-from-workspace p 'ignore-last-project-restriction)))
     (unless (treemacs-workspace->projects (treemacs-current-workspace))
       (treemacs-do-add-project-to-workspace root name))))
+
+;;; Keybindings
 
 (leader
   "e" '(tree-toggle :wk "tree")

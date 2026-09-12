@@ -1,10 +1,4 @@
-;;; pickers.el --- fuzzy picker (minibuffer) and completion popup  -*- lexical-binding: t -*-
-;;
-;; Emacs has no single "picker" plugin. Instead a few small packages combine
-;; around the built-in minibuffer: vertico shows the list, orderless does the
-;; fuzzy matching, marginalia adds descriptions, consult provides the actual
-;; search commands, embark adds actions on results. Together they replace
-;; snacks.picker / telescope.
+;;; pickers.el --- minibuffer navigation and completion  -*- lexical-binding: t -*-
 
 ;; Vertical candidate list in the minibuffer.
 (use-package vertico
@@ -34,9 +28,7 @@
 (use-package marginalia
   :init (marginalia-mode 1))
 
-;; project.el: a directory counts as a project if it is a git repo OR contains
-;; a file called .project. `touch .project` in a folder that holds several
-;; repos (e.g. ~/Code/MeasuringU) makes SPC f f / SPC f g search across all of them.
+;; A .project marker makes a directory a project.
 (use-package project
   :ensure nil
   :custom

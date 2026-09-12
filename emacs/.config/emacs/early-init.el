@@ -12,8 +12,10 @@
 (require 'xdg)
 (startup-redirect-eln-cache (expand-file-name "emacs/eln-cache/" (xdg-cache-home)))
 (setq package-user-dir (expand-file-name "emacs/elpa/" (xdg-data-home)))
-;; Don't pop up a buffer every time a package gets native-compiled.
-(setq native-comp-async-report-warnings-errors 'silent)
+;; Show warnings and errors from asynchronous native compilation in
+;; `*Warnings*'. The detailed compiler output is available in
+;; `*Native-compile-Log*'.
+(setq native-comp-async-report-warnings-errors t)
 
 ;; Some packages' autoload files define transient menus at load time, so
 ;; transient (bundled with Emacs) must be loaded before packages activate.

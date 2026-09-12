@@ -78,10 +78,6 @@
 (use-package vundo
   :commands vundo)
 
-;; Centered, distraction-free writing (SPC z).
-(use-package olivetti
-  :commands olivetti-mode)
-
 ;; which-key: after pressing SPC (or any prefix), pop up what keys come next.
 ;; Built in since Emacs 30.
 (use-package which-key
@@ -98,6 +94,14 @@
     :states '(normal visual motion)   ; leader works in these evil states
     :keymaps 'override                ; ...and beats any mode's own bindings
     :prefix "SPC")
+
+  (define-advice evil-quit-all (:around (orig &optional bang) vim-confirm-quit)
+    (if (and bang (not (yes-or-no-p "Quit Emacs and discard unsaved changes? ")))
+        (message "Quit cancelled")
+      (funcall orig bang)))
+  (define-advice evil-quit-all-with-error-code (:around (orig &rest args) vim-confirm-quit)
+    (when (yes-or-no-p "Quit Emacs? ")
+      (apply orig args)))
 
   (defun config-reload ()
     "Re-evaluate init.el and every lisp/ file in the running Emacs.
@@ -126,7 +130,6 @@ For one file, `M-x eval-buffer' in it does the same thing faster."
     "SPC" '(find-file-dwim :wk "find file")
     ":"   '(consult-complex-command :wk "command history")
     "y"   '(clipboard-kill-ring-save :wk "yank to clipboard")
-    "z"   '(zen-toggle :wk "zen")
     "o"   '(:ignore t :wk "open")        ; org, browser, rss, spotify: notes/browser/feeds/music.el
 
     "f"  '(:ignore t :wk "find")

@@ -1,11 +1,4 @@
-;;; workspaces.el --- one perspective per project, shown in the tab bar with agent status  -*- lexical-binding: t -*-
-;;
-;; A perspective (perspective.el) owns a window layout and a buffer list.
-;; One per project or folder. The tab bar across the top lists them and is the
-;; project overview; herdr-mode (agents.el) adds each workspace's agent counts
-;; to its label: ● working, ◆ needs you, ○ idle.
-;; The tree (treemacs-perspective, tree.el), the agent side window, the shell
-;; panel, and SPC b b all belong to the current perspective.
+;;; workspaces.el --- project perspectives and tab-bar workspace UI  -*- lexical-binding: t -*-
 
 (use-package perspective
   :demand t
@@ -68,11 +61,7 @@ herdr-mode sets it to draw the agent counts.")
   (tab-bar-mode 1)
   (add-hook 'persp-switch-hook (lambda () (force-mode-line-update t))))
 
-;;; Workspace root ------------------------------------------------------------
-;;
-;; The folder a workspace was opened on is its root, whatever git says. SPC f f,
-;; SPC f g, and the tree use it. So a workspace opened on ~/.config/emacs stays
-;; there even though the git repo is ~/.dotfiles.
+;;; Workspace root
 
 (defvar workspace-roots (make-hash-table :test #'equal)
   "Perspective name -> the folder it was opened on.")
@@ -113,7 +102,7 @@ a plain folder gets dired. Used by SPC f p and SPC TAB n."
           (let ((default-directory dir)) (project-find-file))
         (dired dir)))))
 
-;;; Keys ---------------------------------------------------------------------
+;;; Keybindings
 
 ;; s-1 .. s-9 jump straight to a perspective; s-[ s-] cycle.
 (dotimes (n 9)

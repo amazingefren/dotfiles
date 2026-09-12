@@ -1,11 +1,4 @@
-;;; browser.el --- web pages inside Emacs  -*- lexical-binding: t -*-
-;;
-;; Two browsers:
-;;   xwidget-webkit  real WebKit embedded in a buffer (needs the --with-xwidgets
-;;                   build). JavaScript works. Good for localhost and docs.
-;;                   No dev tools, logins are flaky, heavy sites may crash it.
-;;   eww             built-in text browser. No JavaScript. Fast, evil keys.
-;; Plus one key to throw a page at the real macOS browser when neither cuts it.
+;;; browser.el --- embedded WebKit, EWW, and the system browser  -*- lexical-binding: t -*-
 
 (use-package xwidget
   :ensure nil
@@ -23,7 +16,7 @@
 
 (defvar browser-url-history nil)
 
-(defun browser-open (url)
+(defun browser-open (url &optional _new-window)
   "Open URL in the embedded browser, in a split to the right of the current window."
   (interactive
    (list (read-string "URL: " (or (car browser-url-history) "http://localhost:3000")
@@ -46,10 +39,12 @@
          (plist-get eww-data :url))
         (t (thing-at-point 'url t))))
 
-(defun browser-open-externally (url)
+(defun browser-open-externally (url &optional _new-window)
   "Open URL in the macOS default browser. Defaults to the current page or URL at point."
   (interactive (list (read-string "URL: " (browser-current-url))))
   (browse-url-default-macosx-browser url))
+
+;;; Keybindings
 
 (leader
   "ob" '(browser-open :wk "browser")
