@@ -142,6 +142,8 @@ For one file, `M-x eval-buffer' in it does the same thing faster."
 
     "b"  '(:ignore t :wk "buffer")
     "bb" '(consult-buffer :wk "switch")
+    "bn" '(next-buffer :wk "next")
+    "bp" '(previous-buffer :wk "previous")
     "bd" '(kill-current-buffer :wk "kill")
 
     ;; Help, Doom-style. SPC h r r reloads the config.

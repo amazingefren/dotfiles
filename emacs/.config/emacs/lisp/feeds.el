@@ -3,6 +3,40 @@
 (defconst feeds-yarr-fever-url "https://rss.amazingefren.com/fever/"
   "Fever API endpoint for the Yarr instance.")
 
+(defvar feeds-xwidget-buffer nil
+  "The single embedded browser buffer used for feed entries.")
+
+(defun feeds-open-in-split (url &optional _new-window)
+  "Show URL in the feed xwidget, reusing its existing WebKit session.
+The first visit creates a browser split.  Later visits navigate that same
+browser instead of creating more xwidget buffers and windows."
+  (if (not (featurep 'xwidget-internal))
+      (browser-open url)
+    (let ((buffer
+           (if (and (buffer-live-p feeds-xwidget-buffer)
+                    (with-current-buffer feeds-xwidget-buffer
+                      (derived-mode-p 'xwidget-webkit-mode)))
+               (condition-case nil
+                   (with-current-buffer feeds-xwidget-buffer
+                     (xwidget-webkit-goto-uri
+                      (xwidget-webkit-current-session) url)
+                     (current-buffer))
+                 ;; A WebKit session may have been closed while its buffer
+                 ;; survived.  Make a fresh one in that case.
+                 (error nil))
+             nil)))
+      (unless buffer
+        (setq feeds-xwidget-buffer
+              (save-window-excursion
+                (xwidget-webkit-browse-url url t)
+                (current-buffer)))
+        (setq buffer feeds-xwidget-buffer))
+      (select-window
+       (display-buffer buffer '((display-buffer-reuse-window)
+                                (display-buffer-in-direction)
+                                (direction . right)
+                                (window-width . 0.5)))))))
+
 (defun feeds-yarr-source ()
   "Build the Elfeed-protocol source for Yarr."
   (list (format "fever+https://%s@rss.amazingefren.com"
@@ -13,7 +47,7 @@
 (defun feeds-search-browse-in-split ()
   "Open selected feed entries in embedded-browser splits."
   (interactive)
-  (let ((browse-url-browser-function #'browser-open))
+  (let ((browse-url-browser-function #'feeds-open-in-split))
     (elfeed-search-browse-url)))
 
 (defun feeds-search-browse-externally ()
@@ -25,7 +59,7 @@
 (defun feeds-show-browse-in-split ()
   "Open the current feed entry in an embedded-browser split."
   (interactive)
-  (let ((browse-url-browser-function #'browser-open))
+  (let ((browse-url-browser-function #'feeds-open-in-split))
     (elfeed-show-visit)))
 
 (defun feeds-show-browse-externally ()

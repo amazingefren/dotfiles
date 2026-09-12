@@ -37,7 +37,12 @@
 (declare-function persp-switch "perspective")
 (declare-function ghostel-exec "ghostel")
 (declare-function workspace-root "workspaces")
+(declare-function emacs-mcp-activity-refresh "mcp")
 (defvar workspace-status-function)
+;; Declared here so the dynamic binding in `herdr-start' remains dynamic even
+;; with lexical binding.  `agents.el' owns the value and consumes it only
+;; while constructing its per-launch arguments.
+(defvar agents--mcp-launch-context)
 
 (defgroup herdr nil
   "AI coding agents in herdr sessions."
@@ -235,13 +240,22 @@ with C-u both are asked."
     (message "Starting %s as %s in %s…" kind name (abbreviate-file-name root))
     ;; The new pane's shell takes a moment to come up; herdr refuses to start
     ;; an agent until it is at a prompt. Retry for a few seconds.
-    (cl-loop for attempt from 1 to 20
-             do (condition-case e
-                    (cl-return (herdr--run session "agent" "start" name "--kind" kind "--pane" pane "--timeout" "90000"))
-                  (herdr-error
-                   (if (and (equal (nth 1 e) "agent_pane_busy") (< attempt 20))
-                       (sleep-for 0.3)
-                     (signal (car e) (cdr e))))))
+    ;; A frontend can use this dynamic launch context to configure a local
+    ;; companion process (for example, an editor MCP bridge) without Herdr
+    ;; taking a dependency on that frontend.  The actual agent still owns the
+    ;; shell process and inherits HERDR_PANE_ID from Herdr.
+    (let ((agents--mcp-launch-context
+           (list :root root :name name :session session :pane pane)))
+      (cl-loop for attempt from 1 to 20
+               do (condition-case e
+                      (cl-return (apply #'herdr--run session "agent" "start" name "--kind" kind "--pane" pane "--timeout" "90000"
+                                        (append (when (fboundp 'agents--launch-arguments)
+                                                  (when-let* ((arguments (agents--launch-arguments kind)))
+                                                    (cons "--" arguments))))))
+                    (herdr-error
+                     (if (and (equal (nth 1 e) "agent_pane_busy") (< attempt 20))
+                         (sleep-for 0.3)
+                       (signal (car e) (cdr e)))))))
     (herdr--poll)
     (herdr--show session name)))
 
@@ -384,6 +398,12 @@ Also copied to the clipboard.  Point stays in the source buffer."
           (tabulated-list-print t)
           (when id (goto-char (point-min))
                 (while (and (not (eobp)) (not (equal (tabulated-list-get-id) id))) (forward-line 1))))))))
+  ;; The optional Emacs MCP dashboard derives each row's state from this poll.
+  ;; Keep it fresh without making Herdr depend on the bridge.
+  (when (fboundp 'emacs-mcp-activity-refresh)
+    (dolist (buffer (buffer-list))
+      (when (eq (buffer-local-value 'major-mode buffer) 'emacs-mcp-activity-mode)
+        (with-current-buffer buffer (emacs-mcp-activity-refresh)))))
 
 (defun herdr--notify (title body)
   (message "[herdr] %s: %s" title body)

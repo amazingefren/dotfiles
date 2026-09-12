@@ -9,7 +9,8 @@
   :config
   (electric-pair-mode 1)
   (delete-selection-mode 1)
-  (pixel-scroll-precision-mode 1))
+  (setq-default scroll-preserve-screen-position 'always)
+  (pixel-scroll-precision-mode -1))
 
 (use-package editorconfig
   :ensure nil

@@ -11,14 +11,26 @@
   (define-key ghostel-mode-map (kbd "C-h") #'evil-window-left)
   (define-key ghostel-mode-map (kbd "C-l") #'evil-window-right))
 
+(defun terminal-enable-evil-ghostel ()
+  "Enable terminal-first Evil behavior in the current Ghostel buffer."
+  (require 'evil-ghostel)
+  (evil-ghostel-mode 1)
+  (setq-local evil-ghostel--escape-mode 'terminal)
+  (evil-local-set-key 'insert (kbd "<escape>") #'evil-ghostel--escape)
+  (evil-local-set-key 'emacs (kbd "<escape>") #'evil-ghostel--escape))
+
 (use-package evil-ghostel
   :after (ghostel evil)
   :custom
   (evil-ghostel-escape 'terminal)
   :hook
-  (ghostel-mode . evil-ghostel-mode)
+  (ghostel-mode . terminal-enable-evil-ghostel)
   :config
-  (evil-define-key* 'insert evil-ghostel-mode-map (kbd "C-l") #'evil-window-right))
+  (evil-define-key* 'insert evil-ghostel-mode-map (kbd "C-l") #'evil-window-right)
+  (dolist (buffer (buffer-list))
+    (with-current-buffer buffer
+      (when (derived-mode-p 'ghostel-mode)
+        (terminal-enable-evil-ghostel)))))
 
 (defun terminal--buffers ()
   "Return shell buffers in the current workspace."

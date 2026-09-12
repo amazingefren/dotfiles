@@ -1,0 +1,188 @@
+#!/usr/bin/env python3
+"""Expose a running Emacs instance to local MCP clients over stdio."""
+
+import base64
+import json
+import os
+import subprocess
+import sys
+
+
+TOOLS = [
+    {
+        "name": "emacs_context",
+        "description": "Inspect the active Emacs workspace, buffer, cursor, and visible windows. Use this before asking Emacs to show a file.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "emacs_handoff_context",
+        "description": "Call once when beginning a task to get this Herdr agent's workspace, Git status, project outline, and visible Emacs buffers.",
+        "inputSchema": {"type": "object", "properties": {"max_files": {"type": "integer", "minimum": 1}, "max_entries": {"type": "integer", "minimum": 1}}},
+    },
+    {
+        "name": "emacs_open_file",
+        "description": "Reveal a file visibly in Emacs at a line. Use this before or while editing a file so the user can follow your work.",
+        "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "line": {"type": "integer", "minimum": 1}}, "required": ["path"]},
+    },
+    {
+        "name": "emacs_read_file",
+        "description": "Read a local file through Emacs. Relative paths are resolved from the active Emacs workspace.",
+        "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "start_line": {"type": "integer", "minimum": 1}, "end_line": {"type": "integer", "minimum": 1}}, "required": ["path"]},
+    },
+    {
+        "name": "emacs_browser_context",
+        "description": "List pages currently open in Emacs's embedded browser.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "emacs_browser_open",
+        "description": "Open an HTTP(S) URL visibly in Emacs's embedded browser.",
+        "inputSchema": {"type": "object", "properties": {"url": {"type": "string", "format": "uri"}}, "required": ["url"]},
+    },
+    {
+        "name": "emacs_browser_read",
+        "description": "Read rendered text from an EWW browser buffer. Xwidget pages can be opened and observed by the user but do not expose page text.",
+        "inputSchema": {"type": "object", "properties": {"buffer": {"type": "string"}}},
+    },
+    {
+        "name": "emacs_diagnostics",
+        "description": "Read the current Flymake/Eglot diagnostics for a file already known to Emacs. Relative paths use the active Emacs workspace.",
+        "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]},
+    },
+    {
+        "name": "emacs_symbols",
+        "description": "Read Emacs's Imenu symbol index for a file, including line and column positions.",
+        "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]},
+    },
+    {
+        "name": "emacs_selection_context",
+        "description": "Read the selection, symbol, and cursor context at a file location in this agent's launch workspace.",
+        "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "line": {"type": "integer", "minimum": 1}, "column": {"type": "integer", "minimum": 0}, "max_characters": {"type": "integer", "minimum": 1}}, "required": ["path"]},
+    },
+    {
+        "name": "emacs_range_context",
+        "description": "Read a bounded explicit source range from a file in this agent's launch workspace.",
+        "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "start_line": {"type": "integer", "minimum": 1}, "start_column": {"type": "integer", "minimum": 0}, "end_line": {"type": "integer", "minimum": 1}, "end_column": {"type": "integer", "minimum": 0}, "max_characters": {"type": "integer", "minimum": 1}}, "required": ["path", "start_line"]},
+    },
+    {
+        "name": "emacs_project_outline",
+        "description": "Read a bounded project file outline through Emacs project support.",
+        "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "max_files": {"type": "integer", "minimum": 1}}, "required": ["path"]},
+    },
+    {
+        "name": "emacs_git_status",
+        "description": "Read structured, read-only Git status and branch information for this agent's project.",
+        "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "max_entries": {"type": "integer", "minimum": 1}}, "required": ["path"]},
+    },
+    {
+        "name": "emacs_xref_definitions",
+        "description": "Find Emacs/xref definitions for the identifier at a file location, scoped to this workspace.",
+        "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "line": {"type": "integer", "minimum": 1}, "column": {"type": "integer", "minimum": 0}, "max_results": {"type": "integer", "minimum": 1}}, "required": ["path", "line"]},
+    },
+    {
+        "name": "emacs_xref_references",
+        "description": "Find Emacs/xref references for the identifier at a file location, scoped to this workspace.",
+        "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "line": {"type": "integer", "minimum": 1}, "column": {"type": "integer", "minimum": 0}, "max_results": {"type": "integer", "minimum": 1}}, "required": ["path", "line"]},
+    },
+    {
+        "name": "emacs_documentation_at_point",
+        "description": "Read immediate Emacs or ElDoc documentation for the symbol at a file location.",
+        "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "line": {"type": "integer", "minimum": 1}, "column": {"type": "integer", "minimum": 0}}, "required": ["path", "line"]},
+    },
+    {
+        "name": "emacs_browser_page",
+        "description": "Read bounded rendered text and links from an already open EWW page. Xwidget pages remain visual-only.",
+        "inputSchema": {"type": "object", "properties": {"buffer": {"type": "string"}, "max_characters": {"type": "integer", "minimum": 1}, "max_links": {"type": "integer", "minimum": 1}}},
+    },
+    {
+        "name": "emacs_show_worktree_diff",
+        "description": "Read the staged and unstaged tracked diff versus HEAD, plus untracked-file status, for this agent's Git worktree.",
+        "inputSchema": {"type": "object", "properties": {"max_characters": {"type": "integer", "minimum": 1}}},
+    },
+    {
+        "name": "emacs_compilation_context",
+        "description": "Inspect existing Emacs Compilation buffers and parsed messages. It never starts a command.",
+        "inputSchema": {"type": "object", "properties": {"buffer": {"type": "string"}}},
+    },
+    {
+        "name": "emacs_compilation_read",
+        "description": "Read bounded output and parsed messages from an existing Emacs Compilation buffer. It never starts a command.",
+        "inputSchema": {"type": "object", "properties": {"buffer": {"type": "string"}, "max_characters": {"type": "integer", "minimum": 1}}},
+    },
+    {
+        "name": "emacs_compilation_reveal",
+        "description": "Reveal an existing Compilation buffer in Emacs without creating or running a command.",
+        "inputSchema": {"type": "object", "properties": {"buffer": {"type": "string"}}},
+    },
+]
+
+
+def emacs_call(method, arguments):
+    arguments = dict(arguments)
+    arguments.update(bridge_context())
+    payload = base64.b64encode(json.dumps(arguments).encode()).decode()
+    expression = '(emacs-mcp-dispatch "%s" "%s")' % (method, payload)
+    command = [os.environ.get("EMACSCLIENT", "emacsclient"), "-s", os.environ.get("EMACS_SERVER_NAME", "server"), "--eval", expression]
+    completed = subprocess.run(command, capture_output=True, text=True)
+    if completed.returncode:
+        raise RuntimeError(completed.stderr.strip() or completed.stdout.strip() or "emacsclient failed")
+    result = json.loads(completed.stdout.strip())
+    return json.loads(result) if isinstance(result, str) else result
+
+
+def agent_identity():
+    return os.environ.get("EMACS_MCP_AGENT_NAME", "Codex")
+
+
+def bridge_context():
+    root = os.environ.get("EMACS_MCP_WORKSPACE_ROOT")
+    if not root or not os.path.isdir(root):
+        raise RuntimeError("Emacs MCP requires a Herdr-launched agent workspace")
+    return {
+        "__emacs_mcp_workspace_root": root,
+        "__emacs_mcp_agent_name": agent_identity(),
+        "__emacs_mcp_herdr_session": os.environ.get("EMACS_MCP_HERDR_SESSION", ""),
+        "__emacs_mcp_pane": os.environ.get("HERDR_PANE_ID", ""),
+    }
+
+
+def response(request_id, result=None, error=None):
+    message = {"jsonrpc": "2.0", "id": request_id}
+    if error:
+        message["error"] = error
+    else:
+        message["result"] = result
+    sys.stdout.write(json.dumps(message, separators=(",", ":")) + "\n")
+    sys.stdout.flush()
+
+
+def handle(message):
+    method = message.get("method")
+    request_id = message.get("id")
+    if method == "notifications/initialized":
+        return
+    if method == "initialize":
+        response(request_id, {"protocolVersion": "2025-06-18", "capabilities": {"tools": {}}, "serverInfo": {"name": "emacs", "version": "0.1"}})
+    elif method == "tools/list":
+        response(request_id, {"tools": TOOLS})
+    elif method == "tools/call":
+        tool = message.get("params", {}).get("name", "")
+        if not tool.startswith("emacs_"):
+            response(request_id, error={"code": -32602, "message": "Unknown tool"})
+            return
+        try:
+            result = emacs_call(tool.removeprefix("emacs_"), message.get("params", {}).get("arguments", {}))
+            if "error" in result:
+                raise RuntimeError(result["error"])
+            response(request_id, {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]})
+        except Exception as exc:
+            response(request_id, {"content": [{"type": "text", "text": str(exc)}], "isError": True})
+    else:
+        response(request_id, error={"code": -32601, "message": "Method not found"})
+
+
+for line in sys.stdin:
+    try:
+        handle(json.loads(line))
+    except Exception as exc:
+        print("emacs-mcp: %s" % exc, file=sys.stderr)

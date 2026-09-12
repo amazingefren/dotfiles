@@ -1,12 +1,23 @@
 ;;; browser.el --- embedded WebKit, EWW, and the system browser  -*- lexical-binding: t -*-
 
+(defun browser-resize-xwidgets (frame)
+  "Resize WebKit views after a window layout change in FRAME."
+  (walk-windows
+   (lambda (window)
+     (with-current-buffer (window-buffer window)
+       (when (derived-mode-p 'xwidget-webkit-mode)
+         (xwidget-webkit-auto-adjust-size window))))
+   nil frame))
+
 (use-package xwidget
   :ensure nil
   :if (featurep 'xwidget-internal)          ; only if this Emacs was built with xwidgets
   :commands (xwidget-webkit-browse-url)
   :custom
   (browse-url-browser-function #'xwidget-webkit-browse-url)             ; links open inside Emacs...
-  (browse-url-secondary-browser-function #'browse-url-default-macosx-browser)) ; ...C-u to force Safari
+  (browse-url-secondary-browser-function #'browse-url-default-macosx-browser) ; ...C-u to force Safari
+  :config
+  (add-hook 'window-size-change-functions #'browser-resize-xwidgets))
 
 (use-package eww
   :ensure nil

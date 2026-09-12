@@ -28,5 +28,5 @@
 ;; file and put its name in this list.
 (dolist (file '("defaults" "packages" "environment" "session" "security" "editing" "op"
                 "themes" "modeline" "vim" "pickers" "workspaces" "browser" "writing" "lang"
-                "git" "feeds" "tree" "terminal" "windows" "music" "agents" "home"))
+                "git" "feeds" "tree" "terminal" "windows" "music" "ai-review" "ai-intelligence" "mcp" "agents" "home"))
   (load (expand-file-name (concat "lisp/" file) user-emacs-directory) nil 'nomessage))
