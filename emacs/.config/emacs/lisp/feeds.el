@@ -6,6 +6,17 @@
 (defvar feeds-xwidget-buffer nil
   "The single embedded browser buffer used for feed entries.")
 
+(defvar feeds-update-timer nil
+  "Timer that keeps Elfeed synchronized with Yarr.")
+
+(defun feeds-refresh ()
+  "Refresh feeds when no Elfeed curl requests are in progress."
+  (interactive)
+  (when (and (featurep 'elfeed-protocol)
+             (zerop elfeed-curl-queue-active)
+             (null elfeed-curl-queue))
+    (elfeed-update)))
+
 (defun feeds-open-in-split (url &optional _new-window)
   "Show URL in the feed xwidget, reusing its existing WebKit session.
 The first visit creates a browser split.  Later visits navigate that same
@@ -107,9 +118,14 @@ browser instead of creating more xwidget buffers and windows."
   :custom
   (elfeed-protocol-enabled-protocols '(fever))
   (elfeed-protocol-fever-fetch-category-as-tag t)
-  (elfeed-protocol-fever-update-unread-only nil)
+  ;; Yarr article IDs can have large gaps. Fetch the actual unread IDs
+  ;; instead of only the next 50 consecutive IDs after the saved cursor.
+  (elfeed-protocol-fever-update-unread-only t)
   :config
-  (elfeed-protocol-enable))
+  (elfeed-protocol-enable)
+  (when (timerp feeds-update-timer)
+    (cancel-timer feeds-update-timer))
+  (setq feeds-update-timer (run-at-time 0 (* 5 60) #'feeds-refresh)))
 
 ;; Saved Elfeed filters. Yarr folders arrive as tags via Fever.
 (defvar feeds-filters
@@ -136,7 +152,8 @@ browser instead of creating more xwidget buffers and windows."
   "Open RSS in the home workspace."
   (interactive)
   (persp-switch "home")
-  (elfeed))
+  (elfeed)
+  (feeds-refresh))
 
 ;;; Keybindings
 

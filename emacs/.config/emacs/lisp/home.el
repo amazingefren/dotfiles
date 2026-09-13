@@ -6,8 +6,7 @@
   (persp-switch "home")
   (delete-other-windows)
   (elfeed)
-  (when (zerop (elfeed-db-last-update))   ; never fetched: do it now, in the background
-    (elfeed-update))
+  (feeds-refresh)
   (herdr-overview)
   (select-window (get-buffer-window "*elfeed-search*")))
 
