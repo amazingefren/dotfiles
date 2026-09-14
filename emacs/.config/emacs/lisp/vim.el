@@ -134,7 +134,7 @@ For one file, `M-x eval-buffer' in it does the same thing faster."
 
     "f"  '(:ignore t :wk "find")
     "ff" '(find-file-dwim :wk "file")
-    "fg" '(project-ripgrep :wk "grep")
+    "fg" '(consult-ripgrep :wk "grep")
     "fr" '(consult-recent-file :wk "recent")
     "fc" '(find-config-file :wk "config")
     "fp" '(project-switch-project :wk "project")
