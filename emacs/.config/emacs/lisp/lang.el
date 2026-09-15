@@ -12,6 +12,11 @@
     (setq treesit-extra-load-path (list dir)
           treesit--install-language-grammar-out-dir-history (list dir))))
 
+(use-package csv-mode
+  :mode ("\\.[ct]sv\\'" . csv-mode)
+  :hook (csv-mode . csv-align-mode)
+  )
+
 ;; Give each project its mise-managed toolchain environment.
 (use-package mise
   :hook (after-init . global-mise-mode))
