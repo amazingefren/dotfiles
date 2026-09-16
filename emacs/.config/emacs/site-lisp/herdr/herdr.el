@@ -129,9 +129,11 @@ Signal a user error on failure."
 (defun herdr--ensure-session (session)
   "Make sure SESSION's server is running; start it headless if not."
   (unless (herdr--session-running-p session)
-    (let ((proc (start-process (format "herdr-server-%s" session) nil
-                               herdr-program "--session" session "server")))
-      (set-process-query-on-exit-flag proc nil))
+    (let ((default-directory (expand-file-name "~/")))
+      (call-process "/bin/sh" nil 0 nil "-c"
+                    (format "nohup %s --session %s server >/dev/null 2>&1 &"
+                            (shell-quote-argument herdr-program)
+                            (shell-quote-argument session))))
     (cl-loop repeat 50
              until (herdr--session-running-p session)
              do (sleep-for 0.1))
