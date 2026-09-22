@@ -166,7 +166,8 @@ For one file, `M-x eval-buffer' in it does the same thing faster."
     "hr"  '(:ignore t :wk "reload")
     "hrr" '(config-reload :wk "config")
     "hrt" '(themes-pick :wk "theme (live preview, remembered)")
-    "hrp" '(package-upgrade-all :wk "upgrade packages")
+    "hrp" '(packages-upgrade-with-rollback :wk "upgrade packages (snapshot first)")
+    "hrP" '(packages-rollback :wk "roll back packages")
 
     "s"  '(:ignore t :wk "search")
     "sb" '(consult-line :wk "buffer lines")
@@ -179,4 +180,8 @@ For one file, `M-x eval-buffer' in it does the same thing faster."
     "sm" '(consult-mark :wk "marks")
     "s\"" '(consult-register :wk "registers")
     "sM" '(consult-man :wk "man")
-    "uu" '(vundo :wk "undo tree")))
+    "su" '(vundo :wk "undo tree")
+
+    ;; C-u scrolls (evil-want-C-u-scroll), so the prefix argument lives here,
+    ;; as in Doom: SPC u SPC a a is what Emacs docs write as C-u SPC a a.
+    "u" '(universal-argument :wk "prefix arg (C-u)")))

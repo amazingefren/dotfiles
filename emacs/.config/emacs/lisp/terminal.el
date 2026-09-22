@@ -18,6 +18,17 @@
       (define-key ghostel-link-map (kbd (format "%s-<down-mouse-1>" mod)) #'ignore)
       (define-key ghostel-link-map (kbd (format "%s-<mouse-1>" mod)) #'terminal-open-link-externally))))
 
+;; ghostel redraws right away only for output that follows a keystroke;
+;; anything else waits for its ~30fps batching timer.  A wheel event
+;; forwarded to a TUI (Claude, or herdr's panes) is input too, so count it
+;; and let the repaint it causes show at once instead of every ~45ms.
+(defvar ghostel--last-send-time)
+(defun terminal--scroll-counts-as-input (orig event button)
+  (let ((sent (funcall orig event button)))
+    (when sent (setq ghostel--last-send-time (current-time)))
+    sent))
+(advice-add 'ghostel--forward-scroll-event :around #'terminal--scroll-counts-as-input)
+
 (defun terminal-open-link-externally (event)
   "Open the terminal link at EVENT with `browse-url-secondary-browser-function'."
   (interactive "e")

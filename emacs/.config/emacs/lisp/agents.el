@@ -101,7 +101,7 @@ state or a model-controlled tool argument."
 ;; and rename/kill are also `r'/`x' in the SPC a v overview.
 (leader
   "a"  '(:ignore t :wk "agent")
-  "aa" '(herdr-start :wk "launch agent (C-u: pick kind)")
+  "aa" '(herdr-start :wk "launch agent (SPC u first: pick kind)")
   "at" '(herdr-toggle :wk "toggle herdr")
   "aj" '(herdr-switch :wk "jump to agent")
   "ap" '(herdr-prompt :wk "prompt agent")

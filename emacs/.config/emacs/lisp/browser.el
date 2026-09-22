@@ -15,7 +15,7 @@
   :commands (xwidget-webkit-browse-url)
   :custom
   (browse-url-browser-function #'xwidget-webkit-browse-url)             ; links open inside Emacs...
-  (browse-url-secondary-browser-function #'browse-url-default-macosx-browser) ; ...C-u to force Safari
+  (browse-url-secondary-browser-function #'browse-url-default-macosx-browser) ; ...SPC u (C-u) first to force Safari
   :config
   (add-hook 'window-size-change-functions #'browser-resize-xwidgets))
 

@@ -37,10 +37,5 @@
 (push '(width . 140) default-frame-alist)               ; initial size in characters
 (push '(height . 50) default-frame-alist)
 
-(setq gc-cons-threshold most-positive-fixnum
-      gc-cons-percentage 0.5)
-(add-hook 'emacs-startup-hook
-	  (lambda () (setq gc-cons-threshold 800000)))
-
 ;; Use Emacs' own fullscreen
 (setq ns-use-native-fullscreen nil)
