@@ -40,3 +40,5 @@ fish/.config/fish/fish_variables
 /emacs/.config/emacs/recentf.eld
 /emacs/.config/emacs/history
 /emacs/.config/emacs/elpa/gnupg
+emacs/.config/emacs/etc/*
+!emacs/.config/emacs/etc/herdr.toml

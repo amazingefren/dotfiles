@@ -4,6 +4,8 @@
   :load-path "site-lisp/herdr"
   :ensure nil
   :demand t
+  :custom
+  (herdr-config-file (expand-file-name "etc/herdr.toml" user-emacs-directory))
   :config
   (herdr-mode 1)
   (evil-set-initial-state 'herdr-overview-mode 'normal)
@@ -46,14 +48,6 @@ MCP arguments by `bin/emacs-mcp'.")
   (when (equal kind "codex")
     (agents--emacs-mcp-arguments)))
 
-(defun agents--default-name (kind)
-  "Return the next available name for KIND."
-  (let ((taken (herdr--agent-names (herdr--session))))
-    (cl-loop for i from 1
-             for name = (if (= i 1) kind (format "%s-%d" kind i))
-             unless (member name taken)
-             return name)))
-
 (defun agents-mcp-agent-metadata (pane)
   "Return the live Herdr metadata associated with MCP PANE.
 
@@ -95,39 +89,47 @@ state or a model-controlled tool argument."
 (defun agents-mcp-show-agent (pane &optional _name)
   "Show the Herdr agent identified by MCP PANE, returning non-nil on success."
   (when-let* ((metadata (agents-mcp-agent-metadata pane))
-              (session (alist-get 'session metadata))
-              (agent (alist-get 'name metadata)))
-    (herdr--show session agent)
+              (session (alist-get 'session metadata)))
+    (herdr--show session (format "%s" pane))
     t))
-
-(defun agents-start-claude ()
-  "Start a Claude agent."
-  (interactive)
-  (herdr-start "claude" (agents--default-name "claude")))
-
-(defun agents-start-codex ()
-  "Start a Codex agent."
-  (interactive)
-  (herdr-start "codex" (agents--default-name "codex")))
 
 ;;; Keybindings
 
+;; Pane, tab, and shell management happens inside the herdr side window;
+;; these are only the Emacs-side entry points.  Everything unbound here
+;; (rename, kill, set default kind, MCP activity log) is still on M-x,
+;; and rename/kill are also `r'/`x' in the SPC a v overview.
 (leader
   "a"  '(:ignore t :wk "agent")
-  "aa" '(herdr-toggle :wk "show/hide")
-  "as" '(herdr-start :wk "start (C-u: pick kind/name)")
-  "ac" '(agents-start-claude :wk "start Claude")
-  "ax" '(agents-start-codex :wk "start Codex")
-  "aS" '(herdr-set-default-kind :wk "set default")
-  "az" '(herdr-switch :wk "switch")
-  "ap" '(herdr-prompt :wk "prompt")
-  "al" '(herdr-send-region :wk "send region")
-  "ad" '(herdr-overview-workspace :wk "agents here")
-  "aD" '(herdr-overview :wk "agents everywhere")
-  "av" '(emacs-mcp-show-activity :wk "activity")
-  "af" '(emacs-mcp-toggle-follow :wk "follow mode")
-  "aR" '(ai-review-show-worktree-diff :wk "review diff")
-  "aC" '(ai-review-show-compilation :wk "compilation")
-  "ak" '(herdr-kill :wk "kill")
-  "ar" '(herdr-rename :wk "rename")
+  "aa" '(herdr-start :wk "launch agent (C-u: pick kind)")
+  "at" '(herdr-toggle :wk "toggle herdr")
+  "aj" '(herdr-switch :wk "jump to agent")
+  "ap" '(herdr-prompt :wk "prompt agent")
+  "al" '(herdr-send-region :wk "send region ref")
+  "av" '(herdr-overview :wk "view all agents")
+  "ad" '(ai-review-show-worktree-diff :wk "review diff")
+  "ac" '(ai-review-show-compilation :wk "compilation")
+  "af" '(emacs-mcp-toggle-follow :wk "toggle follow mode")
   "ab" '(herdr-bind-session :wk "bind session"))
+
+(defun agents-send-region-or-window-right ()
+  "Send the visual selection's reference to an agent from a file buffer.
+Anywhere else, keep C-l's usual move to the window on the right."
+  (interactive)
+  (if buffer-file-name
+      (call-interactively #'herdr-send-region)
+    (evil-window-right 1)))
+
+(with-eval-after-load 'evil
+  (define-key evil-visual-state-map (kbd "C-l") #'agents-send-region-or-window-right))
+
+(defun agents-herdr-navigation-keys ()
+  "Let C-h/j/k/l cross herdr panes in every Evil state, vim-tmux-navigator style.
+Buffer-local Evil keys outrank evil-ghostel's and ghostel's own bindings."
+  (dolist (state '(insert normal emacs))
+    (evil-local-set-key state (kbd "C-h") #'herdr-navigate-left)
+    (evil-local-set-key state (kbd "C-j") #'herdr-navigate-down)
+    (evil-local-set-key state (kbd "C-k") #'herdr-navigate-up)
+    (evil-local-set-key state (kbd "C-l") #'herdr-navigate-right)))
+
+(add-hook 'herdr-client-mode-hook #'agents-herdr-navigation-keys)

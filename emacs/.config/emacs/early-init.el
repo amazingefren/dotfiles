@@ -28,16 +28,15 @@
 
 ;; Frame appearance, set here so the first frame is drawn correctly instead
 ;; of flashing the defaults first.
-(setq inhibit-startup-screen t                          ; no splash screen
+(setq inhibit-startup-screen t
       inhibit-startup-echo-area-message user-login-name ; no "For information about GNU Emacs..."
       frame-inhibit-implied-resize t                    ; don't resize frame when font/UI changes
       frame-resize-pixelwise t)                         ; resize by pixel, not by character
-(push '(tool-bar-lines . 0) default-frame-alist)        ; no toolbar
-(push '(vertical-scroll-bars) default-frame-alist)      ; no scrollbars
+(push '(tool-bar-lines . 0) default-frame-alist)
+(push '(vertical-scroll-bars) default-frame-alist)
 (push '(width . 140) default-frame-alist)               ; initial size in characters
 (push '(height . 50) default-frame-alist)
 
-;; Allegedly better GC
 (setq gc-cons-threshold most-positive-fixnum
       gc-cons-percentage 0.5)
 (add-hook 'emacs-startup-hook

@@ -15,14 +15,16 @@
 ;;   first agent command in a workspace asks which session to use, offering
 ;;   the running ones plus a new one named after the workspace.  Sessions
 ;;   outlive Emacs: restart, and `herdr-switch' reattaches.
-;; - Agents run in herdr panes.  Emacs shows one at a time in a side window
-;;   through a ghostel terminal attached to that pane.
+;; - Agents run in herdr panes.  Emacs shows the session in a side window
+;;   through a ghostel terminal running the full herdr client, so herdr's
+;;   own tabs and shells work there too; agent commands focus that client
+;;   on the agent.
 ;; - Agent states are polled and shown as glyphs in the tab bar
 ;;   (● working, ◆ needs you, ○ idle) and in `herdr-overview', which lists
 ;;   every agent in every session.
 ;;
 ;; Commands: `herdr-start', `herdr-switch', `herdr-toggle', `herdr-prompt', `herdr-rename',
-;; `herdr-send-region', `herdr-overview', `herdr-kill', `herdr-bind-session'.
+;; `herdr-send-region', `herdr-overview', `herdr-kill', `herdr-bind-session', `herdr-clean'.
 ;; Turn on `herdr-mode' for the polling and tab-bar integration.
 
 ;;; Code:
@@ -52,6 +54,19 @@
 (defcustom herdr-program "herdr"
   "The herdr executable."
   :type 'string)
+
+(defcustom herdr-config-file nil
+  "herdr config file for sessions run from Emacs, or nil for herdr's default.
+Passed as HERDR_CONFIG_PATH to every herdr process this package starts.
+A session's server reads it when it starts."
+  :type '(choice (const :tag "herdr's default" nil) file))
+
+(defun herdr--environment ()
+  "`process-environment' for herdr processes, with `herdr-config-file' applied."
+  (if herdr-config-file
+      (cons (concat "HERDR_CONFIG_PATH=" (expand-file-name herdr-config-file))
+            process-environment)
+    process-environment))
 
 (defcustom herdr-agent-kinds '("claude" "codex" "gemini" "copilot" "opencode" "pi")
   "Agent kinds offered by `herdr-start'.  Must be kinds herdr knows (see `herdr agent start --help')."
@@ -88,13 +103,17 @@ When nil, ask on first use and save the choice in `custom-file'."
 
 (defvar herdr--poll-timer nil)
 
+(defvar-local herdr--client-session nil
+  "The herdr session this buffer's client is attached to.")
+
 ;;;; herdr CLI
 
 (defun herdr--run (session &rest args)
   "Run herdr with ARGS against SESSION; return the parsed JSON result.
 Signal a user error on failure."
   (with-temp-buffer
-    (let* ((args (append (when session (list "--session" session)) args))
+    (let* ((process-environment (herdr--environment))
+           (args (append (when session (list "--session" session)) args))
            (code (apply #'call-process herdr-program nil t nil args))
            (out (string-trim (buffer-string))))
       (cond
@@ -129,7 +148,8 @@ Signal a user error on failure."
 (defun herdr--ensure-session (session)
   "Make sure SESSION's server is running; start it headless if not."
   (unless (herdr--session-running-p session)
-    (let ((default-directory (expand-file-name "~/")))
+    (let ((default-directory (expand-file-name "~/"))
+          (process-environment (herdr--environment)))
       (call-process "/bin/sh" nil 0 nil "-c"
                     (format "nohup %s --session %s server >/dev/null 2>&1 &"
                             (shell-quote-argument herdr-program)
@@ -167,9 +187,11 @@ Prompts with the running sessions plus a fresh one named after the workspace."
   session)
 
 (defun herdr--session ()
-  "This workspace's session, asking for one the first time."
-  (or (gethash (herdr--workspace) herdr--workspace-sessions)
-      (call-interactively #'herdr-bind-session)))
+  "This workspace's session, asking for one the first time.
+A bound session that was stopped or deleted is started again."
+  (if-let* ((session (gethash (herdr--workspace) herdr--workspace-sessions)))
+      (herdr--ensure-session session)
+    (call-interactively #'herdr-bind-session)))
 
 ;;;; Agents
 
@@ -178,7 +200,16 @@ Prompts with the running sessions plus a fresh one named after the workspace."
   (alist-get 'agents (herdr--run session "agent" "list")))
 
 (defun herdr--agent-names (session)
-  (mapcar (lambda (a) (alist-get 'name a)) (herdr--agents session)))
+  (delq nil (mapcar (lambda (a) (alist-get 'name a)) (herdr--agents session))))
+
+(defun herdr--agent-label (agent)
+  "AGENT's name, or its kind and pane when herdr has no name for it.
+Agents resumed or started from inside herdr can be unnamed."
+  (or (alist-get 'name agent)
+      (format "%s %s" (alist-get 'agent agent) (alist-get 'pane_id agent))))
+
+(defun herdr--agent (session pane)
+  (seq-find (lambda (a) (equal (alist-get 'pane_id a) pane)) (herdr--agents session)))
 
 (defun herdr-set-default-kind (kind)
   "Use KIND as the default agent kind on this machine."
@@ -203,19 +234,20 @@ Prompts with the running sessions plus a fresh one named after the workspace."
     (_          "·")))
 
 (defun herdr--read-agent (session prompt)
-  "Pick one of SESSION's agents, showing its state."
+  "Pick one of SESSION's agents, showing its state; return its pane id."
   (let* ((agents (herdr--agents session))
-         (names (mapcar (lambda (a) (alist-get 'name a)) agents)))
-    (unless agents (user-error "No agents in session %s. SPC a s starts one" session))
-    (if (= 1 (length names))
-        (car names)
-      (let ((completion-extra-properties
-             `(:annotation-function
-               ,(lambda (name)
-                  (let ((a (seq-find (lambda (x) (equal (alist-get 'name x) name)) agents)))
-                    (format "  %s %s  %s" (herdr--status-glyph (alist-get 'agent_status a))
-                            (alist-get 'agent_status a) (or (alist-get 'terminal_title_stripped a) "")))))))
-        (completing-read prompt names nil t)))))
+         (choices (mapcar (lambda (a) (cons (herdr--agent-label a) a)) agents)))
+    (unless agents (user-error "No agents in session %s. SPC a a starts one" session))
+    (alist-get 'pane_id
+               (if (= 1 (length agents))
+                   (car agents)
+                 (let ((completion-extra-properties
+                        `(:annotation-function
+                          ,(lambda (label)
+                             (let ((a (alist-get label choices nil nil #'equal)))
+                               (format "  %s %s  %s" (herdr--status-glyph (alist-get 'agent_status a))
+                                       (alist-get 'agent_status a) (or (alist-get 'terminal_title_stripped a) "")))))))
+                   (alist-get (completing-read prompt choices nil t) choices nil nil #'equal))))))
 
 (defun herdr--root ()
   (if (fboundp 'workspace-root) (workspace-root) default-directory))
@@ -223,8 +255,8 @@ Prompts with the running sessions plus a fresh one named after the workspace."
 ;;;###autoload
 (defun herdr-start (kind name)
   "Start a new agent of KIND called NAME in this workspace's session, at the workspace root.
-Without a prefix argument KIND is `herdr-default-kind' and NAME is picked for you;
-with C-u both are asked."
+NAME also labels the agent's herdr workspace.  KIND is `herdr-default-kind'
+unless given a prefix argument."
   (interactive
    (let* ((session (herdr--session))
           (kind (if current-prefix-arg
@@ -233,8 +265,11 @@ with C-u both are asked."
           (taken (herdr--agent-names session))
           (default (cl-loop for i from 1
                             for n = (if (= i 1) kind (format "%s-%d" kind i))
-                            unless (member n taken) return n)))
-     (list kind (if current-prefix-arg (read-string "Name: " default) default))))
+                            unless (member n taken) return n))
+          (name (string-trim (read-string (format "Name for %s (default %s): " kind default)
+                                          nil nil default))))
+     (when (member name taken) (user-error "An agent is already called %s" name))
+     (list kind (if (string-empty-p name) default name))))
   (let* ((session (herdr--session))
          (root (directory-file-name (expand-file-name (herdr--root))))
          (ws (herdr--run session "workspace" "create" "--cwd" root "--label" name))
@@ -259,66 +294,115 @@ with C-u both are asked."
                          (sleep-for 0.3)
                        (signal (car e) (cdr e)))))))
     (herdr--poll)
-    (herdr--show session name)))
+    (herdr--show session pane)))
 
-(defun herdr--buffer-name (session name) (format "*herdr: %s/%s*" session name))
+(defun herdr--buffer-name (session) (format "*herdr: %s*" session))
 
-(defun herdr--attach-buffer (session name)
-  "A ghostel buffer attached to agent NAME in SESSION, created if needed."
-  (let ((bname (herdr--buffer-name session name)))
-    (or (let ((b (get-buffer bname)))
-          (and b (get-buffer-process b) (process-live-p (get-buffer-process b)) b))
-        (progn
-          (require 'ghostel)
-          (when-let* ((old (get-buffer bname))) (kill-buffer old))
-          (let ((buffer (get-buffer-create bname)))
-            (save-window-excursion
-              (ghostel-exec buffer herdr-program (list "--session" session "agent" "attach" name)))
-            buffer)))))
+(defun herdr--client-buffer (session)
+  "A ghostel buffer running the full herdr client for SESSION.
+Return (BUFFER . FRESH), where FRESH is non-nil if the client was just started.
+The full client, unlike `herdr agent attach', forwards mouse clicks and drags
+to the pane, and gives the side window herdr's own tabs, shells, and agents."
+  (let* ((bname (herdr--buffer-name session))
+         (live (let ((b (get-buffer bname)))
+                 (and b (get-buffer-process b) (process-live-p (get-buffer-process b)) b))))
+    (if live
+        (cons live nil)
+      (require 'ghostel)
+      (when-let* ((old (get-buffer bname))) (kill-buffer old))
+      (herdr--ensure-session session)
+      (let ((buffer (get-buffer-create bname))
+            (process-environment (herdr--environment)))
+        (save-window-excursion
+          (ghostel-exec buffer herdr-program (list "--session" session)))
+        (with-current-buffer buffer
+          (setq herdr--client-session session)
+          (herdr-client-mode 1))
+        (cons buffer t)))))
+
+;;;; Moving between herdr panes and Emacs windows
+
+(defun herdr--focused-pane (session)
+  (alist-get 'pane_id (seq-find (lambda (p) (eq (alist-get 'focused p) t))
+                                (alist-get 'panes (herdr--run session "pane" "list")))))
+
+(defun herdr--navigate (direction)
+  "Focus the herdr pane in DIRECTION, or the Emacs window there at herdr's edge.
+DIRECTION is left, right, up, or down, as in vim-tmux-navigator."
+  (let* ((session herdr--client-session)
+         (pane (and session (herdr--focused-pane session)))
+         (edges (and pane (alist-get 'edges (herdr--run session "pane" "edges" "--pane" pane)))))
+    (if (and edges (not (eq (alist-get direction edges) t)))
+        (herdr--run session "pane" "focus" "--direction" (symbol-name direction) "--pane" pane)
+      (pcase direction
+        ('left (windmove-left)) ('right (windmove-right))
+        ('up (windmove-up)) ('down (windmove-down))))))
+
+(defun herdr-navigate-left () "Pane or window to the left." (interactive) (herdr--navigate 'left))
+(defun herdr-navigate-right () "Pane or window to the right." (interactive) (herdr--navigate 'right))
+(defun herdr-navigate-up () "Pane or window above." (interactive) (herdr--navigate 'up))
+(defun herdr-navigate-down () "Pane or window below." (interactive) (herdr--navigate 'down))
+
+(defvar herdr-client-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "C-h") #'herdr-navigate-left)
+    (define-key map (kbd "C-j") #'herdr-navigate-down)
+    (define-key map (kbd "C-k") #'herdr-navigate-up)
+    (define-key map (kbd "C-l") #'herdr-navigate-right)
+    map))
+
+(define-minor-mode herdr-client-mode
+  "In a herdr client buffer, C-h/j/k/l move between herdr panes, then Emacs windows."
+  :keymap herdr-client-mode-map)
 
 (defun herdr--side-window ()
   (seq-find (lambda (w) (and (eq (window-parameter w 'window-side) 'right)
                              (string-prefix-p "*herdr: " (buffer-name (window-buffer w)))))
             (window-list)))
 
-(defun herdr--show (session name)
-  "Show agent NAME of SESSION in the right side window and select it."
-  (select-window
-   (display-buffer (herdr--attach-buffer session name)
-                   `((display-buffer-in-side-window)
-                     (side . right) (slot . 0)
-                     (window-width . ,herdr-window-width)))))
+(defun herdr--display (session)
+  "Show SESSION's herdr client in the right side window and select it.
+Return non-nil if the client was just started."
+  (pcase-let ((`(,buffer . ,fresh) (herdr--client-buffer session)))
+    (select-window
+     (display-buffer buffer
+                     `((display-buffer-in-side-window)
+                       (side . right) (slot . 0)
+                       (window-width . ,herdr-window-width))))
+    fresh))
+
+(defun herdr--show (session pane)
+  "Show SESSION's herdr client with the agent in PANE focused."
+  (let ((fresh (herdr--display session)))
+    (herdr--run session "agent" "focus" pane)
+    ;; A client that is still connecting misses the first focus; repeat it
+    ;; once the handshake has had time to finish.
+    (when fresh
+      (run-at-time 1 nil (lambda () (ignore-errors (herdr--run session "agent" "focus" pane)))))))
 
 ;;;###autoload
-(defun herdr-switch (name)
-  "Show agent NAME from this workspace's session; asks which when there are several."
+(defun herdr-switch (pane)
+  "Show the agent in PANE from this workspace's session; asks which when there are several."
   (interactive (list (herdr--read-agent (herdr--session) "Agent: ")))
-  (herdr--show (herdr--session) name))
+  (herdr--show (herdr--session) pane))
 
 ;;;###autoload
 (defun herdr-toggle ()
-  "Hide the agent window if it is showing, else show the last (or only) agent."
+  "Hide the herdr side window if it is showing, else show this workspace's session."
   (interactive)
   (if-let* ((w (herdr--side-window)))
       (delete-window w)
-    (let* ((session (herdr--session))
-           (names (herdr--agent-names session)))
-      (cond ((null names) (call-interactively #'herdr-start))
-            ((= 1 (length names)) (herdr--show session (car names)))
-            (t (call-interactively #'herdr-switch))))))
-
-(defun herdr--pane (session name)
-  (alist-get 'pane_id (seq-find (lambda (a) (equal (alist-get 'name a) name)) (herdr--agents session))))
+    (herdr--display (herdr--session))))
 
 ;;;###autoload
-(defun herdr-prompt (name text)
-  "Submit TEXT as a prompt to agent NAME and show the agent."
+(defun herdr-prompt (pane text)
+  "Submit TEXT as a prompt to the agent in PANE and show the agent."
   (interactive
    (let* ((session (herdr--session))
-          (name (herdr--read-agent session "Prompt agent: ")))
-     (list name (read-string (format "Prompt %s: " name)))))
-  (herdr--run (herdr--session) "agent" "prompt" name text)
-  (herdr--show (herdr--session) name)
+          (pane (herdr--read-agent session "Prompt agent: ")))
+     (list pane (read-string (format "Prompt %s: " (herdr--agent-label (herdr--agent session pane)))))))
+  (herdr--run (herdr--session) "agent" "prompt" pane text)
+  (herdr--show (herdr--session) pane)
   (herdr--poll))
 
 ;;;###autoload
@@ -328,45 +412,117 @@ Also copied to the clipboard.  Point stays in the source buffer."
   (interactive "r")
   (unless buffer-file-name (user-error "Buffer is not visiting a file"))
   (let* ((session (herdr--session))
-         (name (herdr--read-agent session "Send to: "))
+         (pane (herdr--read-agent session "Send to: "))
          (path (file-relative-name buffer-file-name (herdr--root)))
          (ref (format "@%s#L%d-L%d" path (line-number-at-pos beg) (line-number-at-pos (max beg (1- end)))))
          (source (selected-window)))
     (kill-new ref)
     (when (and (fboundp 'evil-visual-state-p) (evil-visual-state-p)) (evil-exit-visual-state))
-    (herdr--run session "pane" "send-text" (herdr--pane session name) (concat ref " "))
-    (herdr--show session name)
+    (herdr--run session "pane" "send-text" pane (concat ref " "))
+    (herdr--show session pane)
     (select-window source)
-    (message "Sent %s to %s" ref name)))
+    (message "Sent %s to %s" ref (herdr--agent-label (herdr--agent session pane)))))
+
+(defun herdr--rename (session pane new-name)
+  "Rename the agent in PANE to NEW-NAME, and its herdr workspace with it.
+The workspace is renamed only when it holds just this agent, as the ones
+`herdr-start' creates do."
+  (let* ((agent (herdr--agent session pane))
+         (ws-id (alist-get 'workspace_id agent))
+         (ws (seq-find (lambda (w) (equal (alist-get 'workspace_id w) ws-id))
+                       (alist-get 'workspaces (herdr--run session "workspace" "list")))))
+    (herdr--run session "agent" "rename" pane new-name)
+    (when (eql (alist-get 'pane_count ws) 1)
+      (herdr--run session "workspace" "rename" ws-id new-name))
+    (herdr--poll)))
 
 ;;;###autoload
-(defun herdr-rename (name new-name)
-  "Rename agent NAME to NEW-NAME (shown in the picker, overview, and buffer name)."
+(defun herdr-rename (pane new-name)
+  "Rename the agent in PANE to NEW-NAME."
   (interactive
    (let* ((session (herdr--session))
-          (name (herdr--read-agent session "Rename agent: ")))
-     (list name (read-string (format "New name for %s: " name) name))))
-  (let ((session (herdr--session)))
-    (herdr--run session "agent" "rename" name new-name)
-    (when-let* ((b (get-buffer (herdr--buffer-name session name))))
-      (with-current-buffer b (rename-buffer (herdr--buffer-name session new-name))))
-    (herdr--poll)
-    (message "Renamed %s -> %s" name new-name)))
+          (pane (herdr--read-agent session "Rename agent: "))
+          (label (herdr--agent-label (herdr--agent session pane))))
+     (list pane (read-string (format "New name for %s: " label) (alist-get 'name (herdr--agent session pane))))))
+  (herdr--rename (herdr--session) pane new-name)
+  (message "Renamed to %s" new-name))
 
-(defun herdr--kill (session name)
-  "Close NAME's pane in SESSION and its attach buffer."
-  (herdr--run session "pane" "close" (herdr--pane session name))
-  (when-let* ((b (get-buffer (herdr--buffer-name session name))))
-    (let ((kill-buffer-query-functions nil)) (kill-buffer b)))
+(defun herdr--kill (session pane)
+  "Close PANE in SESSION."
+  (herdr--run session "pane" "close" pane)
   (herdr--poll))
 
 ;;;###autoload
-(defun herdr-kill (name)
-  "Close agent NAME's pane (this ends the agent) and its attach buffer."
+(defun herdr-kill (pane)
+  "Close the agent's PANE (this ends the agent)."
   (interactive (list (herdr--read-agent (herdr--session) "Kill agent: ")))
   (let ((session (herdr--session)))
-    (when (yes-or-no-p (format "Kill agent %s in %s? " name session))
-      (herdr--kill session name))))
+    (when (yes-or-no-p (format "Kill agent %s in %s? " (herdr--agent-label (herdr--agent session pane)) session))
+      (herdr--kill session pane))))
+
+;;;; Cleanup
+
+(defun herdr--idle-pane-p (session pane)
+  "Non-nil when PANE runs no agent and its shell is at a prompt.
+The shell owns the foreground process group only while nothing runs in it."
+  (and (not (alist-get 'agent pane))
+       (let ((info (alist-get 'process_info
+                              (herdr--run session "pane" "process-info" "--pane" (alist-get 'pane_id pane)))))
+         (equal (alist-get 'foreground_process_group_id info) (alist-get 'shell_pid info)))))
+
+(defun herdr--idle-workspaces (session)
+  "SESSION's workspaces whose every pane is an idle shell, as (ID . LABEL)."
+  (cl-loop for ws in (alist-get 'workspaces (herdr--run session "workspace" "list"))
+           for id = (alist-get 'workspace_id ws)
+           for panes = (alist-get 'panes (herdr--run session "pane" "list" "--workspace" id))
+           when (and panes (seq-every-p (lambda (p) (herdr--idle-pane-p session p)) panes))
+           collect (cons id (alist-get 'label ws))))
+
+(defun herdr--delete-session (session)
+  (with-temp-buffer
+    (call-process herdr-program nil t nil "session" "delete" "--json" session)
+    (unless (string-match-p "\"deleted\":true" (buffer-string))
+      (user-error "herdr session delete %s: %s" session (string-trim (buffer-string))))))
+
+;;;###autoload
+(defun herdr-clean ()
+  "Delete stopped herdr sessions and close idle spaces, after one confirmation.
+Stopped sessions bound to an Emacs workspace, and herdr's default session, are
+kept.  Spaces are closed only in running sessions bound to an Emacs workspace;
+a space is idle when every pane in it is a shell at its prompt, with no agent."
+  (interactive)
+  (let* ((bound (hash-table-values herdr--workspace-sessions))
+         (sessions (herdr--sessions))
+         (stopped (cl-loop for (name . running) in sessions
+                           unless (or running (member name bound) (equal name "default"))
+                           collect name))
+         (idle (cl-loop for (name . running) in sessions
+                        when (and running (member name bound))
+                        append (mapcar (lambda (ws) (cons name ws)) (herdr--idle-workspaces name)))))
+    (if (not (or stopped idle))
+        (message "Nothing to clean")
+      (with-current-buffer (get-buffer-create "*herdr clean*")
+        (let ((inhibit-read-only t))
+          (erase-buffer)
+          (when stopped
+            (insert "Delete stopped sessions:\n")
+            (dolist (s stopped) (insert "  " s "\n")))
+          (when idle
+            (insert (if stopped "\n" "") "Close idle spaces:\n")
+            (pcase-dolist (`(,session ,id . ,label) idle)
+              (insert (format "  %s: %s (%s)\n" session label id)))))
+        (special-mode)
+        (goto-char (point-min)))
+      (let ((window (display-buffer "*herdr clean*")))
+        (unwind-protect
+            (when (yes-or-no-p (format "Delete %d session(s) and close %d space(s)? "
+                                       (length stopped) (length idle)))
+              (dolist (s stopped) (herdr--delete-session s))
+              (pcase-dolist (`(,session ,id . ,_label) idle)
+                (herdr--run session "workspace" "close" id))
+              (herdr--poll)
+              (message "Deleted %d session(s), closed %d space(s)" (length stopped) (length idle)))
+          (when (window-live-p window) (quit-window t window)))))))
 
 ;;;; Polling and tab-bar glyphs
 
@@ -382,11 +538,11 @@ Also copied to the clipboard.  Point stays in the source buffer."
                  (new (ignore-errors (herdr--agents session))))
              (when herdr-notify
                (dolist (a new)
-                 (let* ((name (alist-get 'name a))
-                        (was (alist-get 'agent_status (seq-find (lambda (o) (equal (alist-get 'name o) name)) old)))
+                 (let* ((pane (alist-get 'pane_id a))
+                        (was (alist-get 'agent_status (seq-find (lambda (o) (equal (alist-get 'pane_id o) pane)) old)))
                         (now (alist-get 'agent_status a)))
                    (when (and (equal was "working") (member now '("blocked" "done")))
-                     (herdr--notify (format "%s %s" name now) (or (alist-get 'terminal_title_stripped a) ""))))))
+                     (herdr--notify (format "%s %s" (herdr--agent-label a) now) (or (alist-get 'terminal_title_stripped a) ""))))))
              (puthash session new herdr--agents)))))
      herdr--workspace-sessions))
   (force-mode-line-update t)
@@ -449,19 +605,18 @@ Also copied to the clipboard.  Point stays in the source buffer."
 (defun herdr-overview-rename ()
   "Rename the agent on this line."
   (interactive)
-  (pcase-let ((`(,ws ,session ,name) (tabulated-list-get-id)))
-    (let ((new (read-string (format "New name for %s: " name) name)))
-      (herdr--run session "agent" "rename" name new)
-      (when-let* ((b (get-buffer (herdr--buffer-name session name))))
-        (with-current-buffer b (rename-buffer (herdr--buffer-name session new))))
+  (pcase-let ((`(,_workspace ,session ,pane) (tabulated-list-get-id)))
+    (let* ((agent (herdr--agent session pane))
+           (new (read-string (format "New name for %s: " (herdr--agent-label agent)) (alist-get 'name agent))))
+      (herdr--rename session pane new)
       (herdr-overview-refresh))))
 
 (defun herdr-overview-kill ()
   "Kill the agent on this line after confirmation."
   (interactive)
-  (pcase-let ((`(,_workspace ,session ,name) (tabulated-list-get-id)))
-    (when (yes-or-no-p (format "Kill agent %s in %s? " name session))
-      (herdr--kill session name)
+  (pcase-let ((`(,_workspace ,session ,pane) (tabulated-list-get-id)))
+    (when (yes-or-no-p (format "Kill agent %s in %s? " (herdr--agent-label (herdr--agent session pane)) session))
+      (herdr--kill session pane)
       (herdr-overview-refresh))))
 
 (define-derived-mode herdr-overview-mode tabulated-list-mode "herdr"
@@ -479,9 +634,9 @@ Also copied to the clipboard.  Point stays in the source buffer."
      (lambda (ws session)
        (dolist (a (and (or (eq herdr-overview--scope 'all) (equal ws herdr-overview--scope))
                        (gethash session herdr--agents)))
-         (push (list (list ws session (alist-get 'name a))
-                     (vector ws session (alist-get 'name a)
-                             (concat (herdr--status-glyph (alist-get 'agent_status a)) " " (alist-get 'agent_status a))
+         (push (list (list ws session (alist-get 'pane_id a))
+                     (vector ws session (herdr--agent-label a)
+                             (concat (herdr--status-glyph (alist-get 'agent_status a)) " " (or (alist-get 'agent_status a) ""))
                              (or (alist-get 'terminal_title_stripped a) "")))
                rows)))
      herdr--workspace-sessions)
@@ -523,10 +678,10 @@ SCOPE is `all' (default) or a workspace name; see `herdr-overview-workspace'."
 (defun herdr-overview-visit ()
   "Switch to the agent's workspace and show it."
   (interactive)
-  (pcase-let ((`(,ws ,session ,name) (tabulated-list-get-id)))
+  (pcase-let ((`(,ws ,session ,pane) (tabulated-list-get-id)))
     (when (and (fboundp 'persp-switch) (not (equal ws (herdr--workspace))))
       (persp-switch ws))
-    (herdr--show session name)))
+    (herdr--show session pane)))
 
 ;;;; Mode
 

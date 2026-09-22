@@ -3,17 +3,17 @@
 ;; evil: vim modes, motions, operators, text objects, registers, ex commands.
 (use-package evil
   :pin melpa                          ; GNU ELPA release lags; 1.15.0 breaks on Emacs 31
-  :demand t                           ; load immediately
+  :demand t
   :init
   ;; These must be set BEFORE evil loads, hence :init.
-  (setq evil-want-integration t         ; load evil's built-in integrations
+  (setq evil-want-integration t
         evil-want-keybinding nil        ; don't bind keys in other modes; evil-collection does that better
         evil-want-C-u-scroll t          ; C-u scrolls up like vim (instead of Emacs prefix arg)
         evil-want-Y-yank-to-eol t       ; Y yanks to end of line (like nvim default)
         evil-undo-system 'undo-redo     ; use Emacs 28+ built-in undo/redo for u and C-r
         evil-respect-visual-line-mode t ; j/k move by screen line when lines wrap
-        evil-split-window-below t       ; :split opens below
-        evil-vsplit-window-right t)     ; :vsplit opens right
+        evil-split-window-below t
+        evil-vsplit-window-right t)
   :config
   (evil-mode 1)
 
@@ -53,7 +53,16 @@
     (evil-normal-state)
     (evil-visual-restore))
   (define-key evil-visual-state-map (kbd "<") #'visual-shift-left)
-  (define-key evil-visual-state-map (kbd ">") #'visual-shift-right))
+  (define-key evil-visual-state-map (kbd ">") #'visual-shift-right)
+
+  ;; Deleted text (d, c, x, s, and text replaced by a visual paste) still
+  ;; goes to the kill ring for p, but not to the system clipboard; only
+  ;; yanks do.  c, x, and s all delete through `evil-delete'.
+  (defun vim--without-clipboard (fn &rest args)
+    (let ((interprogram-cut-function nil))
+      (apply fn args)))
+  (advice-add 'evil-delete :around #'vim--without-clipboard)
+  (advice-add 'evil-visual-paste :around #'vim--without-clipboard))
 
 ;; evil-collection: vim keys in every other mode (magit, dired, help, terminals...).
 (use-package evil-collection
@@ -125,7 +134,7 @@ For one file, `M-x eval-buffer' in it does the same thing faster."
   ;; Top-level and general leader binds. :wk is the label which-key shows.
   ;; Other prefixes live with their feature: SPC l lang.el, SPC g git.el,
   ;; SPC o notes/browser/feeds/music.el, SPC TAB workspaces.el + home.el,
-  ;; SPC e tree.el, SPC t and SPC w shell.el, SPC a agents.el.
+  ;; SPC e tree.el, SPC t terminal.el, SPC w windows.el, SPC a agents.el.
   (leader
     "SPC" '(find-file-dwim :wk "find file")
     ":"   '(consult-complex-command :wk "command history")

@@ -10,7 +10,7 @@
   (doom-modeline-minor-modes nil)
   (doom-modeline-modal t)                           ; evil state, e.g. NORMAL
   (doom-modeline-modal-icon nil)
-  (doom-modeline-persp-name t)                      ; current workspace
+  (doom-modeline-persp-name t)
   (doom-modeline-display-default-persp-name t)
   (doom-modeline-vcs-max-length 24)
   (doom-modeline-check-simple-format t)             ; "2 errors" instead of per-type icons

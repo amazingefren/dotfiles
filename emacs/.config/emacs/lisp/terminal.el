@@ -9,7 +9,20 @@
   (ghostel-keymap-exceptions '("C-c" "C-x" "C-u" "C-h" "C-l" "M-x" "M-:" "C-\\"))
   :config
   (define-key ghostel-mode-map (kbd "C-h") #'evil-window-left)
-  (define-key ghostel-mode-map (kbd "C-l") #'evil-window-right))
+  (define-key ghostel-mode-map (kbd "C-l") #'evil-window-right)
+  ;; A plain click opens links in xwidgets; C-/Cmd-click uses the macOS
+  ;; browser, for pages that need its logins.  The down events are bound so
+  ;; the global C-down-mouse-1 buffer menu doesn't pop up first.
+  (with-eval-after-load 'ghostel-links
+    (dolist (mod '("C" "s"))
+      (define-key ghostel-link-map (kbd (format "%s-<down-mouse-1>" mod)) #'ignore)
+      (define-key ghostel-link-map (kbd (format "%s-<mouse-1>" mod)) #'terminal-open-link-externally))))
+
+(defun terminal-open-link-externally (event)
+  "Open the terminal link at EVENT with `browse-url-secondary-browser-function'."
+  (interactive "e")
+  (let ((browse-url-browser-function browse-url-secondary-browser-function))
+    (ghostel-open-link-at-click event)))
 
 (defun terminal-enable-evil-ghostel ()
   "Enable terminal-first Evil behavior in the current Ghostel buffer."
