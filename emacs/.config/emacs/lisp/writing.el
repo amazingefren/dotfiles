@@ -9,7 +9,8 @@
   (org-default-notes-file "~/org/inbox.org")
   (org-capture-templates
    '(("t" "Task" entry (file+headline "todo.org" "Tasks") "* TODO %?\n  %U")
-     ("n" "Note" entry (file "notes.org") "* %?\n  %U")))
+     ("n" "Note" entry (file "notes.org") "* %?\n  %U")
+     ("m" "Meeting" entry (file+olp+datetree "meetings.org") "* %^{Meeting}\n  %U\n  - %?")))
   (org-startup-indented t)
   (org-hide-emphasis-markers t)
   :config
@@ -21,7 +22,31 @@
 (defun writing-open-org-directory ()
   "Open the Org directory in Dired."
   (interactive)
+  (require 'org)
   (dired org-directory))
+
+(defun writing-find-org-file ()
+  "Find a file in the Org directory."
+  (interactive)
+  (require 'org)
+  (consult-fd org-directory))
+
+;; PDFs open in xwidget (WebKit's PDF viewer): smooth continuous scrolling
+;; and selectable text, driven by mouse/trackpad (keys don't reach it).
+;; Visiting a .pdf returns an xwidget buffer instead of a file buffer, so
+;; C-x C-f, dired, SPC f r and friends all open it there.
+(defun writing-pdf-in-xwidget (orig filename &optional nowarn rawfile wildcards)
+  "Visit FILENAME in xwidget if it is a PDF, else call ORIG."
+  (if (and (not rawfile)
+           (featurep 'xwidget-internal)
+           (display-graphic-p)
+           (string-match-p "\\.pdf\\'" filename)
+           (file-exists-p filename))
+      (save-window-excursion
+        (xwidget-webkit-browse-url (concat "file://" (expand-file-name filename)) t)
+        (current-buffer))
+    (funcall orig filename nowarn rawfile wildcards)))
+(advice-add 'find-file-noselect :around #'writing-pdf-in-xwidget)
 
 (use-package markdown-mode
   :mode ("\\.md\\'" . gfm-mode)
@@ -58,4 +83,5 @@
   "oa" '(org-agenda :wk "agenda")
   "oc" '(org-capture :wk "capture")
   "oo" '(writing-open-org-directory :wk "org directory")
+  "of" '(writing-find-org-file :wk "org file")
   "om" '(markdown-live-preview-mode :wk "markdown preview"))

@@ -61,6 +61,17 @@ herdr-mode sets it to draw the agent counts.")
   (tab-bar-mode 1)
   (add-hook 'persp-switch-hook (lambda () (force-mode-line-update t))))
 
+;; Tab line: buffer tabs above each window, under the workspace bar.
+;; gt/gT move between them, as in vim (evil binds them to hidden tab-bar tabs).
+(use-package tab-line
+  :ensure nil
+  :config
+  (global-tab-line-mode 1)
+  (with-eval-after-load 'evil
+    (evil-define-key 'motion 'global
+      "gt" #'tab-line-switch-to-next-tab
+      "gT" #'tab-line-switch-to-prev-tab)))
+
 ;;; Workspace root
 
 (defvar workspace-roots (make-hash-table :test #'equal)
@@ -80,8 +91,7 @@ SPC f f, SPC f g, new shells, agent sessions, and the tree follow it."
   (let ((dir (file-name-as-directory (file-truename dir))))
     (puthash (persp-current-name) dir workspace-roots)
     (setq default-directory dir)
-    (when (and (fboundp 'treemacs-current-visibility) (eq (treemacs-current-visibility) 'visible))
-      (save-selected-window (tree-show-root dir)))
+    (tree-show-root dir)
     (message "Workspace root: %s" (abbreviate-file-name dir))))
 
 ;;; Open a project (or any folder) in its own perspective -------------------

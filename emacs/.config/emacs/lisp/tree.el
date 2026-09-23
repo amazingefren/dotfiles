@@ -1,61 +1,61 @@
-;;; tree.el --- file tree sidebar  -*- lexical-binding: t -*-
+;;; tree.el --- file tree sidebar and file manager  -*- lexical-binding: t -*-
 
-;; Treemacs is the workspace file tree.
-(use-package treemacs
-  :commands (treemacs treemacs-select-window treemacs-find-file)
+;; Dirvish is dired with icons, git status and previews. It replaces dired
+;; everywhere (SPC o o, C-x d, RET on a folder), so every dired key still
+;; works, and its side window is the workspace file tree.
+;; Icons need the Symbols Nerd Font (brew install --cask font-symbols-only-nerd-font).
+(use-package nerd-icons)
+
+(use-package dirvish
+  :demand t
   :custom
-  (treemacs-width 32)
-  (treemacs-is-never-other-window nil)      ; C-h / C-w w can move into the tree
-  (treemacs-follow-after-init t)
-  (treemacs-indentation 1)
-  (treemacs-show-hidden-files t)
-  (treemacs-git-mode 'simple)               ; color files by git status ('deferred throws timer errors when the tree is re-rooted)
-  (treemacs-collapse-dirs 3)                ; a/b/c shown as one line when a and b are empty
+  (dirvish-attributes '(nerd-icons subtree-state vc-state file-size file-time))
+  (dirvish-side-attributes '(nerd-icons subtree-state vc-state))
+  (dirvish-side-width 32)
+  (insert-directory-program "gls")          ; GNU ls (brew coreutils): macOS ls can't group dirs
+  (dired-listing-switches "-alh --group-directories-first")
+  (dirvish-quick-access-entries
+   '(("h" "~/"          "Home")
+     ("d" "~/Downloads/" "Downloads")
+     ("o" "~/org/"       "Org")
+     ("c" "~/Code/"      "Code")
+     ("." "~/.dotfiles/" "Dotfiles")))
   :config
-  (treemacs-follow-mode 1)                  ; highlight the file you're editing
-  (treemacs-filewatch-mode 1)               ; refresh when files change on disk
-  ;; No project-follow-mode: it would re-root the tree to the git root whenever
-  ;; you switch buffers. The tree shows the workspace root (tree-toggle) instead.
-  (treemacs-fringe-indicator-mode 'always))
-
-;; Vim keys inside the tree.
-(use-package treemacs-evil
-  :after (treemacs evil))
-
-;; One tree per perspective: switching workspace switches the tree.
-(use-package treemacs-perspective
-  :after (treemacs perspective)
-  :config
-  (treemacs-set-scope-type 'Perspectives))
-
-;; Git status colors stay in sync with magit.
-(use-package treemacs-magit
-  :after (treemacs magit))
+  ;; The GNU ELPA package keeps its extensions in a subfolder, off load-path
+  ;; and without autoloads: add the folder and load them all, since the ?
+  ;; menu (dirvish-dispatch) links to commands across every extension.
+  (let ((ext (expand-file-name "extensions" (file-name-directory (locate-library "dirvish")))))
+    (add-to-list 'load-path ext)
+    (dolist (file (directory-files ext nil "\\.el\\'"))
+      (require (intern (file-name-base file)))))
+  (require 'dirvish-extras)
+  (require 'dirvish-fd)
+  ;; The ? menu names dirvish-fd-jump, which this version doesn't define.
+  (unless (fboundp 'dirvish-fd-jump) (defalias 'dirvish-fd-jump #'dirvish-fd))
+  (dirvish-override-dired-mode 1)
+  (dirvish-side-follow-mode 1)              ; highlight the file you're editing
+  (evil-define-key 'normal dirvish-mode-map
+    (kbd "TAB") #'dirvish-subtree-toggle    ; expand a folder in place, like a tree
+    "q"         #'dirvish-quit
+    "a"         #'dirvish-quick-access      ; jump to Home, Downloads, Org...
+    "?"         #'dirvish-dispatch          ; menu of everything dirvish can do
+    "s"         #'dirvish-quicksort
+    "P"         #'dirvish-layout-toggle))   ; full-screen with preview pane
 
 (defun tree-toggle ()
-  "Toggle the file tree. If it is visible but not focused, focus it."
+  "Toggle the file tree at the workspace root.
+If it is visible but not focused, focus it; if focused, close it."
   (interactive)
-  (require 'treemacs)   ; only the entry commands autoload; the helpers below don't
-  (pcase (treemacs-current-visibility)
-    ('visible (if (eq (selected-window) (treemacs-get-local-window))
-                  (delete-window (treemacs-get-local-window))
-                (treemacs-select-window)))
-    ;; Not visible: show the workspace root, and only that.
-    (_ (tree-show-root (workspace-root)))))
+  (dirvish-side (and (not (dirvish-side--session-visible-p)) (workspace-root))))
 
 (defun tree-show-root (root)
-  "Make ROOT the only project in this workspace's tree and show it."
-  (let* ((root (directory-file-name (file-truename root)))   ; treemacs stores resolved paths
-         (name (file-name-nondirectory root)))
-    (treemacs-select-window)   ; creates the tree buffer (and its workspace) if needed
-    (dolist (p (treemacs-workspace->projects (treemacs-current-workspace)))
-      (unless (string= (treemacs-project->path p) root)
-        (treemacs-do-remove-project-from-workspace p 'ignore-last-project-restriction)))
-    (unless (treemacs-workspace->projects (treemacs-current-workspace))
-      (treemacs-do-add-project-to-workspace root name))))
+  "Show ROOT in the file tree, if the tree is visible."
+  (when-let* ((win (dirvish-side--session-visible-p)))
+    (with-selected-window win
+      (dirvish--find-entry 'find-alternate-file root))))
 
 ;;; Keybindings
 
 (leader
   "e" '(tree-toggle :wk "tree")
-  "E" '(treemacs-find-file :wk "reveal file in tree"))
+  "E" '(dirvish :wk "file manager"))

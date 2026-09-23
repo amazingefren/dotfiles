@@ -131,24 +131,56 @@ When nil, ask on first use and save the choice in `custom-file'."
 
 ;;;; herdr CLI
 
+(defun herdr--session-args (session args)
+  (append (when session (list "--session" session)) args))
+
+(defun herdr--parse (code out args)
+  "Return the result of a herdr run that exited with CODE and printed OUT.
+Signal a user error or `herdr-error' on failure."
+  (let ((out (string-trim out)))
+    (cond
+     ((and (eq code 0) (string-empty-p out)) nil)   ; some commands (pane send-text) print nothing on success
+     ((not (string-prefix-p "{" out))
+      (user-error "herdr %s: %s" (string-join args " ") out))
+     (t
+      (let* ((json (json-parse-string out :object-type 'alist :array-type 'list))
+             (err (alist-get 'error json)))
+        (when err
+          (signal 'herdr-error (list (alist-get 'code err) (alist-get 'message err))))
+        (alist-get 'result json))))))
+
 (defun herdr--run (session &rest args)
   "Run herdr with ARGS against SESSION; return the parsed JSON result.
 Signal a user error on failure."
   (with-temp-buffer
     (let* ((process-environment (herdr--environment))
-           (args (append (when session (list "--session" session)) args))
-           (code (apply #'call-process herdr-program nil t nil args))
-           (out (string-trim (buffer-string))))
-      (cond
-       ((and (eq code 0) (string-empty-p out)) nil)   ; some commands (pane send-text) print nothing on success
-       ((not (string-prefix-p "{" out))
-        (user-error "herdr %s: %s" (string-join args " ") out))
-       (t
-      (let* ((json (json-parse-string out :object-type 'alist :array-type 'list))
-             (err (alist-get 'error json)))
-        (when err
-          (signal 'herdr-error (list (alist-get 'code err) (alist-get 'message err))))
-        (alist-get 'result json)))))))
+           (args (herdr--session-args session args))
+           (code (apply #'call-process herdr-program nil t nil args)))
+      (herdr--parse code (buffer-string) args))))
+
+(defun herdr--run-async (session args on-success on-error)
+  "Run herdr with ARGS against SESSION without blocking Emacs.
+Call ON-SUCCESS with the parsed result, or ON-ERROR with the error data."
+  (let* ((process-environment (herdr--environment))
+         (args (herdr--session-args session args))
+         (buffer (generate-new-buffer " *herdr-async*")))
+    (make-process
+     :name "herdr" :buffer buffer :noquery t
+     :command (cons herdr-program args)
+     :connection-type 'pipe
+     :sentinel
+     (lambda (process _event)
+       (unless (process-live-p process)
+         (let ((outcome
+                (condition-case err
+                    (cons t (herdr--parse (process-exit-status process)
+                                          (with-current-buffer buffer (buffer-string))
+                                          args))
+                  (error (cons nil err)))))
+           (kill-buffer buffer)
+           (if (car outcome)
+               (funcall on-success (cdr outcome))
+             (funcall on-error (cdr outcome)))))))))
 
 (define-error 'herdr-error "herdr")
 
@@ -363,9 +395,6 @@ KIND is `herdr-default-kind' unless given a prefix argument."
                                          (herdr--run session "tab" "create"
                                                      "--workspace" (car space)
                                                      "--cwd" root "--label" name "--focus"))))))
-    (message "Starting %s as %s in %s…" kind name (abbreviate-file-name root))
-    ;; The new pane's shell takes a moment to come up; herdr refuses to start
-    ;; an agent until it is at a prompt. Retry for a few seconds.
     ;; A frontend can use this dynamic launch context to configure a local
     ;; companion process (for example, an editor MCP bridge) without Herdr
     ;; taking a dependency on that frontend.  The actual agent still owns the
@@ -375,18 +404,35 @@ KIND is `herdr-default-kind' unless given a prefix argument."
       (when (fboundp 'agents--launch-shell-setup)
         (when-let* ((setup (agents--launch-shell-setup kind)))
           (herdr--run session "pane" "run" pane setup)))
-      (cl-loop for attempt from 1 to 20
-               do (condition-case e
-                      (cl-return (apply #'herdr--run session "agent" "start" name "--kind" kind "--pane" pane "--timeout" "90000"
-                                        (append (when (fboundp 'agents--launch-arguments)
-                                                  (when-let* ((arguments (agents--launch-arguments kind)))
-                                                    (cons "--" arguments))))))
-                    (herdr-error
-                     (if (and (equal (nth 1 e) "agent_pane_busy") (< attempt 20))
-                         (sleep-for 0.3)
-                       (signal (car e) (cdr e)))))))
-    (herdr--poll)
-    (herdr--show session pane)))
+      (herdr--start-agent
+       session pane name
+       (append (list "agent" "start" name "--kind" kind "--pane" pane "--timeout" "90000")
+               (when (fboundp 'agents--launch-arguments)
+                 (when-let* ((arguments (agents--launch-arguments kind)))
+                   (cons "--" arguments))))
+       1))
+    (message "Starting %s as %s in %s…" kind name (abbreviate-file-name root))
+    ;; The new tab is focused, so the client shows the agent booting.
+    (herdr--display session)))
+
+(defun herdr--start-agent (session pane name args attempt)
+  "Run the `agent start' ARGS for NAME in PANE in the background.
+Herdr waits until the agent is ready for input, which takes seconds, so
+Emacs must not wait with it.  The new pane's shell takes a moment to come
+up and herdr refuses to start an agent until it is at a prompt, so retry
+that for a few seconds.  ATTEMPT counts the tries."
+  (herdr--run-async
+   session args
+   (lambda (_result)
+     (herdr--poll)
+     (ignore-errors (herdr--run session "agent" "focus" pane))
+     (message "Started %s" name))
+   (lambda (err)
+     (if (and (eq (car err) 'herdr-error)
+              (equal (nth 1 err) "agent_pane_busy")
+              (< attempt 20))
+         (run-at-time 0.3 nil #'herdr--start-agent session pane name args (1+ attempt))
+       (message "Could not start %s: %s" name (error-message-string err))))))
 
 (defun herdr--buffer-name (session) (format "*herdr: %s*" session))
 

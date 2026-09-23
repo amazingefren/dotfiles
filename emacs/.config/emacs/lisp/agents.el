@@ -61,6 +61,24 @@ MCP arguments by `bin/emacs-mcp'.")
           "-c" (format "mcp_servers.emacs.env.EMACS_MCP_HERDR_SESSION=%s"
                        (json-serialize session)))))
 
+(defun agents--launch-file (session pane suffix data)
+  "Write DATA as JSON for SESSION's PANE and return the file's name.
+Passing launch config by file keeps the command Herdr types into the pane
+short.  A terminal line in canonical mode holds only 1024 bytes, so a long
+command typed before the shell's line editor is up gets cut off."
+  (let* ((dir (if (fboundp 'no-littering-expand-var-file-name)
+                  (no-littering-expand-var-file-name "agents/")
+                (locate-user-emacs-file "agents/")))
+         (file (expand-file-name
+                (format "%s-%s-%s.json"
+                        (replace-regexp-in-string "[^A-Za-z0-9_-]" "_" session)
+                        (replace-regexp-in-string "[^A-Za-z0-9_-]" "_" pane)
+                        suffix)
+                dir)))
+    (make-directory dir t)
+    (with-temp-file file (insert (json-serialize data)))
+    file))
+
 (defun agents--claude-emacs-mcp-arguments ()
   "Return the per-launch Claude configuration for the Emacs MCP server."
   (let* ((program (expand-file-name "bin/emacs-mcp" user-emacs-directory))
@@ -85,7 +103,8 @@ MCP arguments by `bin/emacs-mcp'.")
     (unless (and (stringp session) (stringp pane))
       (user-error "Cannot track Claude without a Herdr session and pane"))
     (list "--settings"
-          (json-serialize
+          (agents--launch-file
+           session pane "settings"
            `((hooks . ((SessionStart . ,plain)
                        (SubagentStart . ,plain)
                        (SubagentStop . ,plain)
@@ -95,7 +114,8 @@ MCP arguments by `bin/emacs-mcp'.")
                        (Stop . ,plain)
                        (SessionEnd . ,plain)))))
           "--mcp-config"
-          (json-serialize
+          (agents--launch-file
+           session pane "mcp"
            `((mcpServers
               . ((emacs
                   . ((command . ,program)
