@@ -1,0 +1,52 @@
+{
+  "format": "laya-review-rubric-v1",
+  "backend": "mlx",
+  "questions": {
+    "concern": {
+      "type": "choice",
+      "instructions": "What is the biggest problem a code reviewer would flag in this change?",
+      "criteria": {
+        "none": "nothing, the change looks fine",
+        "secret": "hardcoded password or API key",
+        "injection": "SQL or command injection from user input",
+        "auth": "authentication or permission check bypassed",
+        "validation_removed": "input validation or a safety check was deleted",
+        "error_swallowed": "errors caught and ignored",
+        "logic": "likely logic bug"
+      },
+      "risk": {
+        "none": 0,
+        "secret": 1,
+        "injection": 1,
+        "auth": 1,
+        "validation_removed": 0.8,
+        "error_swallowed": 0.7,
+        "logic": 0.5
+      }
+    },
+    "secret": {
+      "type": "noul",
+      "instructions": "Do the added lines contain a hardcoded password, token, or API key string?",
+      "risk": {"true": 0.9}
+    },
+    "sql": {
+      "type": "noul",
+      "instructions": "Is a SQL query built by concatenating strings with user input?",
+      "risk": {"true": 0.9}
+    },
+    "removes_check": {
+      "type": "noul",
+      "instructions": "Does the change delete an if-check, validation, or error handling?",
+      "risk": {"true": 0.5}
+    },
+    "swallow": {
+      "type": "noul",
+      "instructions": "Is an exception caught and silently ignored?",
+      "risk": {"true": 0.6}
+    },
+    "is_test": {
+      "type": "noul",
+      "instructions": "Is this a test file or test code?"
+    }
+  }
+}

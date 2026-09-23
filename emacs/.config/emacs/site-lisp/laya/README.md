@@ -137,6 +137,37 @@ starts a fresh worker. Idle shutdown releases model memory after ten minutes
 by default. Customize `laya-idle-seconds`, `laya-request-timeout`,
 `laya-max-queue`, and `laya-retained-jobs` as needed.
 
+## Code review
+
+`SPC g R` (`M-x laya-review`) splits a diff into hunks, asks LAYA the
+rubric's questions about each one, and lists them riskiest first while
+scoring continues. In a magit diff or `diff-mode` buffer it reviews what
+that buffer shows; elsewhere it reviews uncommitted changes against HEAD.
+`SPC g V` reviews the current branch against main, and `SPC u SPC g R`
+offers staged changes or a revision range.
+
+| Key | Action |
+| --- | --- |
+| `RET` | Open the changed line |
+| `TAB` | Show the hunk's answers, distributions and diff |
+| `]]` / `[[` | Next or previous hunk |
+| `f` | Hide hunks below `laya-review-focus-threshold` |
+| `d` | Focused diff: a `diff-mode` buffer of only the hunks that matter |
+| `s` | Sort by risk or by diff order |
+| `e` | Edit the rubric; `gr` rescores with it |
+| `C-c C-k` | Stop scoring |
+
+The rubric, `review-rubric.json`, is data: LAYA questions plus a `risk`
+object per question. A choice's risk is the sum of P(option) x weight, a
+noul's is P(true) x `true` + P(false) x `false`, and a score's is the sum of
+P(level) x weight. A hunk's risk is its largest contribution; questions
+without `risk` are shown but not scored. Set `"backend": "jev"` or a
+`"model"` in the rubric to change models without touching code.
+
+Other code can score a hunk with `laya-review-submit-hunk`, which takes a
+hunk plist from `laya-review-parse-diff` and calls back with the risk,
+reason and answers.
+
 ## Agent access
 
 Herdr-launched agents using this config's Emacs MCP bridge receive:
@@ -219,7 +250,7 @@ From the dotfiles repository root:
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s emacs/.config/emacs/site-lisp/laya/tests -p 'test_*.py'
-emacs -Q --batch -L emacs/.config/emacs/site-lisp/laya -l emacs/.config/emacs/site-lisp/laya/tests/laya-test.el -l emacs/.config/emacs/site-lisp/laya/tests/laya-ui-test.el -f ert-run-tests-batch-and-exit
+emacs -Q --batch -L emacs/.config/emacs/site-lisp/laya -l emacs/.config/emacs/site-lisp/laya/tests/laya-test.el -l emacs/.config/emacs/site-lisp/laya/tests/laya-ui-test.el -l emacs/.config/emacs/site-lisp/laya/tests/laya-review-test.el -f ert-run-tests-batch-and-exit
 ```
 
 Unit tests use fake inference and HTTP fixtures; they require neither model

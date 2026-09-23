@@ -15,6 +15,9 @@ MAX_REQUEST_BYTES = 1024 * 1024
 DEFAULT_MLX_MODEL = "aac6fef/laya-mlx"
 DEFAULT_JEV_MODEL = "jev-1.13.0"
 JEV_URL = "https://api.typesafe.ai/v1/systemone"
+# MLX keeps freed Metal buffers for reuse, and each distinct input length
+# allocates new ones, so an uncapped cache grows to many GiB across requests.
+MLX_CACHE_LIMIT_BYTES = 256 * 1024 * 1024
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -152,9 +155,7 @@ class Worker:
         self.loaded_key = None
         self.jev_api_key = None
 
-    def _release(self):
-        self.agent, self.loaded_key = None, None
-        gc.collect()
+    def _trim_cache(self):
         # The loaded runtime already imported MLX; avoid importing it for status/unload.
         mlx = sys.modules.get("mlx.core")
         if mlx is not None:
@@ -162,6 +163,11 @@ class Worker:
                 mlx.clear_cache()
             except RuntimeError:
                 pass
+
+    def _release(self):
+        self.agent, self.loaded_key = None, None
+        gc.collect()
+        self._trim_cache()
 
     def _load(self, model, revision):
         key = (model, revision)
@@ -187,6 +193,9 @@ class Worker:
             raise WorkerError("model_load_failed", "Local model load failed; verify checkpoint, device, and cache setup",
                               {"exception": type(exc).__name__}) from exc
         self.agent, self.loaded_key = agent, key
+        mlx = sys.modules.get("mlx.core")
+        if mlx is not None and hasattr(mlx, "set_cache_limit"):
+            mlx.set_cache_limit(MLX_CACHE_LIMIT_BYTES)
         return agent
 
     def _resolved_revision(self, agent, revision):
@@ -279,6 +288,8 @@ class Worker:
                     except (ValueError, RuntimeError) as exc:
                         raise WorkerError("inference_failed", "Local inference failed; check question schema and model limits",
                                           {"exception": type(exc).__name__}) from exc
+                    finally:
+                        self._trim_cache()
                     result = dict(native)
                     result.update(backend="mlx", checkpoint=model, revision=actual_revision, context=context)
             elif op == "warm":
