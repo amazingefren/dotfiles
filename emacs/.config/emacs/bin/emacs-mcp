@@ -7,42 +7,45 @@ import os
 import subprocess
 import sys
 
+sys.dont_write_bytecode = True
+from codex_subagents import metadata as codex_session_metadata
+
 
 TOOLS = [
     {
         "name": "emacs_context",
-        "description": "Inspect the active Emacs workspace, buffer, cursor, and visible windows. Use this before asking Emacs to show a file.",
+        "description": "Inspect Emacs's live workspace, active buffer, cursor, and visible windows.",
         "inputSchema": {"type": "object", "properties": {}},
-    },
-    {
-        "name": "emacs_handoff_context",
-        "description": "Call once when beginning a task to get this Herdr agent's workspace, Git status, project outline, and visible Emacs buffers.",
-        "inputSchema": {"type": "object", "properties": {"max_files": {"type": "integer", "minimum": 1}, "max_entries": {"type": "integer", "minimum": 1}}},
     },
     {
         "name": "emacs_open_file",
-        "description": "Reveal a file visibly in Emacs at a line. Use this before or while editing a file so the user can follow your work.",
+        "description": "Load a workspace file into an Emacs buffer without changing editor windows, so Emacs diagnostics and navigation can inspect it.",
         "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "line": {"type": "integer", "minimum": 1}}, "required": ["path"]},
     },
     {
-        "name": "emacs_read_file",
-        "description": "Read a local file through Emacs. Relative paths are resolved from the active Emacs workspace.",
-        "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "start_line": {"type": "integer", "minimum": 1}, "end_line": {"type": "integer", "minimum": 1}}, "required": ["path"]},
+        "name": "emacs_edit_file",
+        "description": "Apply exact text replacements through a live Emacs buffer and save. Each old_text must occur exactly once; dirty or stale buffers are rejected.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "edits": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "properties": {"old_text": {"type": "string", "minLength": 1}, "new_text": {"type": "string"}},
+                        "required": ["old_text", "new_text"],
+                    },
+                },
+            },
+            "required": ["path", "edits"],
+        },
     },
     {
-        "name": "emacs_browser_context",
-        "description": "List pages currently open in Emacs's embedded browser.",
-        "inputSchema": {"type": "object", "properties": {}},
-    },
-    {
-        "name": "emacs_browser_open",
-        "description": "Open an HTTP(S) URL visibly in Emacs's embedded browser.",
-        "inputSchema": {"type": "object", "properties": {"url": {"type": "string", "format": "uri"}}, "required": ["url"]},
-    },
-    {
-        "name": "emacs_browser_read",
-        "description": "Read rendered text from an EWW browser buffer. Xwidget pages can be opened and observed by the user but do not expose page text.",
-        "inputSchema": {"type": "object", "properties": {"buffer": {"type": "string"}}},
+        "name": "emacs_create_file",
+        "description": "Create and save a new file through an Emacs buffer. Its parent directory must already exist.",
+        "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]},
     },
     {
         "name": "emacs_diagnostics",
@@ -60,21 +63,6 @@ TOOLS = [
         "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "line": {"type": "integer", "minimum": 1}, "column": {"type": "integer", "minimum": 0}, "max_characters": {"type": "integer", "minimum": 1}}, "required": ["path"]},
     },
     {
-        "name": "emacs_range_context",
-        "description": "Read a bounded explicit source range from a file in this agent's launch workspace.",
-        "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "start_line": {"type": "integer", "minimum": 1}, "start_column": {"type": "integer", "minimum": 0}, "end_line": {"type": "integer", "minimum": 1}, "end_column": {"type": "integer", "minimum": 0}, "max_characters": {"type": "integer", "minimum": 1}}, "required": ["path", "start_line"]},
-    },
-    {
-        "name": "emacs_project_outline",
-        "description": "Read a bounded project file outline through Emacs project support.",
-        "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "max_files": {"type": "integer", "minimum": 1}}, "required": ["path"]},
-    },
-    {
-        "name": "emacs_git_status",
-        "description": "Read structured, read-only Git status and branch information for this agent's project.",
-        "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "max_entries": {"type": "integer", "minimum": 1}}, "required": ["path"]},
-    },
-    {
         "name": "emacs_xref_definitions",
         "description": "Find Emacs/xref definitions for the identifier at a file location, scoped to this workspace.",
         "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "line": {"type": "integer", "minimum": 1}, "column": {"type": "integer", "minimum": 0}, "max_results": {"type": "integer", "minimum": 1}}, "required": ["path", "line"]},
@@ -89,32 +77,9 @@ TOOLS = [
         "description": "Read immediate Emacs or ElDoc documentation for the symbol at a file location.",
         "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "line": {"type": "integer", "minimum": 1}, "column": {"type": "integer", "minimum": 0}}, "required": ["path", "line"]},
     },
-    {
-        "name": "emacs_browser_page",
-        "description": "Read bounded rendered text and links from an already open EWW page. Xwidget pages remain visual-only.",
-        "inputSchema": {"type": "object", "properties": {"buffer": {"type": "string"}, "max_characters": {"type": "integer", "minimum": 1}, "max_links": {"type": "integer", "minimum": 1}}},
-    },
-    {
-        "name": "emacs_show_worktree_diff",
-        "description": "Read the staged and unstaged tracked diff versus HEAD, plus untracked-file status, for this agent's Git worktree.",
-        "inputSchema": {"type": "object", "properties": {"max_characters": {"type": "integer", "minimum": 1}}},
-    },
-    {
-        "name": "emacs_compilation_context",
-        "description": "Inspect existing Emacs Compilation buffers and parsed messages. It never starts a command.",
-        "inputSchema": {"type": "object", "properties": {"buffer": {"type": "string"}}},
-    },
-    {
-        "name": "emacs_compilation_read",
-        "description": "Read bounded output and parsed messages from an existing Emacs Compilation buffer. It never starts a command.",
-        "inputSchema": {"type": "object", "properties": {"buffer": {"type": "string"}, "max_characters": {"type": "integer", "minimum": 1}}},
-    },
-    {
-        "name": "emacs_compilation_reveal",
-        "description": "Reveal an existing Compilation buffer in Emacs without creating or running a command.",
-        "inputSchema": {"type": "object", "properties": {"buffer": {"type": "string"}}},
-    },
 ]
+
+TOOL_NAMES = frozenset(tool["name"] for tool in TOOLS)
 
 
 def emacs_call(method, arguments):
@@ -146,6 +111,30 @@ def bridge_context():
     }
 
 
+def register_codex_thread():
+    """Tell Emacs which root Codex thread occupies this Herdr pane."""
+    thread = os.environ.get("CODEX_THREAD_ID")
+    pane = os.environ.get("HERDR_PANE_ID")
+    session = os.environ.get("EMACS_MCP_HERDR_SESSION")
+    if not all((thread, pane, session)):
+        return
+    info = codex_session_metadata(thread)
+    if not info or info.get("parent_thread_id"):
+        return
+    expression = "(herdr-register-codex-thread %s %s %s)" % tuple(
+        json.dumps(value) for value in (session, pane, thread)
+    )
+    command = [os.environ.get("EMACSCLIENT", "emacsclient"), "-s",
+               os.environ.get("EMACS_SERVER_NAME", "server"), "--eval", expression]
+    try:
+        # Herdr may still be waiting for this MCP initialize response while
+        # Emacs is inside `herdr-start'.  Let Emacs process the report later.
+        subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+    except OSError:
+        pass
+
+
 def response(request_id, result=None, error=None):
     message = {"jsonrpc": "2.0", "id": request_id}
     if error:
@@ -162,12 +151,13 @@ def handle(message):
     if method == "notifications/initialized":
         return
     if method == "initialize":
-        response(request_id, {"protocolVersion": "2025-06-18", "capabilities": {"tools": {}}, "serverInfo": {"name": "emacs", "version": "0.1"}})
+        register_codex_thread()
+        response(request_id, {"protocolVersion": "2025-06-18", "capabilities": {"tools": {}}, "serverInfo": {"name": "emacs", "version": "0.3"}, "instructions": "Use these tools when live Emacs state is useful: visible buffers, selection, diagnostics, symbols, xref, and documentation. Emacs edit and create tools save through live buffers and reject dirty or stale conflicts. The user's live diff follower observes file changes independently of MCP tool use."})
     elif method == "tools/list":
         response(request_id, {"tools": TOOLS})
     elif method == "tools/call":
         tool = message.get("params", {}).get("name", "")
-        if not tool.startswith("emacs_"):
+        if tool not in TOOL_NAMES:
             response(request_id, error={"code": -32602, "message": "Unknown tool"})
             return
         try:

@@ -1,5 +1,10 @@
 ;;; agents.el --- Herdr AI coding agents  -*- lexical-binding: t -*-
 
+(use-package live-diff
+  :load-path "site-lisp"
+  :ensure nil
+  :demand t)
+
 (use-package herdr
   :load-path "site-lisp/herdr"
   :ensure nil
@@ -11,6 +16,7 @@
   (evil-set-initial-state 'herdr-overview-mode 'normal)
   (evil-define-key 'normal herdr-overview-mode-map
     (kbd "RET") #'herdr-overview-visit
+    (kbd "TAB") #'herdr-overview-toggle-space
     "gr" #'herdr-overview-refresh
     "r" #'herdr-overview-rename
     "x" #'herdr-overview-kill
@@ -22,6 +28,18 @@
 It contains `:root', `:name', `:session', and `:pane'.  The values are passed
 to the MCP stdio process as environment variables, then re-injected as hidden
 MCP arguments by `bin/emacs-mcp'.")
+
+(defun agents--launch-shell-setup (kind)
+  "Return shell setup needed before starting an agent of KIND."
+  (when (equal kind "codex")
+    (let* ((client (or (executable-find "emacsclient")
+                       (user-error "emacsclient is needed for Codex's prompt editor")))
+           (editor (format "%s --reuse-frame --socket-name %s"
+                           (shell-quote-argument client)
+                           (shell-quote-argument (if (boundp 'server-name)
+                                                     server-name "server"))))
+           (quoted (shell-quote-argument editor)))
+      (format "export VISUAL=%s EDITOR=%s" quoted quoted))))
 
 (defun agents--emacs-mcp-arguments ()
   "Return the per-launch Codex configuration for the Emacs MCP server."
@@ -43,10 +61,53 @@ MCP arguments by `bin/emacs-mcp'.")
           "-c" (format "mcp_servers.emacs.env.EMACS_MCP_HERDR_SESSION=%s"
                        (json-serialize session)))))
 
+(defun agents--claude-emacs-mcp-arguments ()
+  "Return the per-launch Claude configuration for the Emacs MCP server."
+  (let* ((program (expand-file-name "bin/emacs-mcp" user-emacs-directory))
+         (hook-program (expand-file-name "bin/claude_subagents.py" user-emacs-directory))
+         (root (plist-get agents--mcp-launch-context :root))
+         (name (plist-get agents--mcp-launch-context :name))
+         (session (plist-get agents--mcp-launch-context :session))
+         (pane (plist-get agents--mcp-launch-context :pane))
+         (hook `((type . "command")
+                 (command . ,(format "HERDR_SESSION=%s HERDR_PANE_ID=%s python3 %s --record"
+                                     (shell-quote-argument (or session ""))
+                                     (shell-quote-argument (or pane ""))
+                                     (shell-quote-argument hook-program)))))
+         (plain `[((hooks . [,hook]))])
+         (task-update `[((matcher . "TaskUpdate") (hooks . [,hook]))]))
+    (unless (file-executable-p program)
+      (user-error "Emacs MCP server is missing or not executable: %s" program))
+    (unless (file-readable-p hook-program)
+      (user-error "Claude overview hook is missing: %s" hook-program))
+    (unless (and (stringp root) (file-directory-p root))
+      (user-error "Cannot start Emacs MCP without an agent workspace root"))
+    (unless (and (stringp session) (stringp pane))
+      (user-error "Cannot track Claude without a Herdr session and pane"))
+    (list "--settings"
+          (json-serialize
+           `((hooks . ((SessionStart . ,plain)
+                       (SubagentStart . ,plain)
+                       (SubagentStop . ,plain)
+                       (TaskCreated . ,plain)
+                       (TaskCompleted . ,plain)
+                       (PostToolUse . ,task-update)
+                       (Stop . ,plain)
+                       (SessionEnd . ,plain)))))
+          "--mcp-config"
+          (json-serialize
+           `((mcpServers
+              . ((emacs
+                  . ((command . ,program)
+                     (env . ((EMACS_MCP_WORKSPACE_ROOT . ,(file-truename root))
+                             (EMACS_MCP_AGENT_NAME . ,name)
+                             (EMACS_MCP_HERDR_SESSION . ,session))))))))))))
+
 (defun agents--launch-arguments (kind)
   "Return extra CLI arguments for agent KIND."
-  (when (equal kind "codex")
-    (agents--emacs-mcp-arguments)))
+  (pcase kind
+    ("codex" (agents--emacs-mcp-arguments))
+    ("claude" (agents--claude-emacs-mcp-arguments))))
 
 (defun agents-mcp-agent-metadata (pane)
   "Return the live Herdr metadata associated with MCP PANE.
@@ -101,15 +162,17 @@ state or a model-controlled tool argument."
 ;; and rename/kill are also `r'/`x' in the SPC a v overview.
 (leader
   "a"  '(:ignore t :wk "agent")
-  "aa" '(herdr-start :wk "launch agent (SPC u first: pick kind)")
+  "aa" '(herdr-start :wk "new agent tab (SPC u: pick kind)")
   "at" '(herdr-toggle :wk "toggle herdr")
   "aj" '(herdr-switch :wk "jump to agent")
   "ap" '(herdr-prompt :wk "prompt agent")
-  "al" '(herdr-send-region :wk "send region ref")
-  "av" '(herdr-overview :wk "view all agents")
+  "al" '(herdr-send-region :wk "send to focused agent")
+  "av" '(herdr-overview :wk "view space tree")
   "ad" '(ai-review-show-worktree-diff :wk "review diff")
+  "aD" '(live-diff-follow-compact-in-split :wk "follow latest change below agent")
   "ac" '(ai-review-show-compilation :wk "compilation")
-  "af" '(emacs-mcp-toggle-follow :wk "toggle follow mode")
+  "af" '(live-diff-toggle-file-follow :wk "follow AI edits in this window")
+  "aF" '(live-diff-follow-in-split :wk "follow AI edits below agent")
   "ab" '(herdr-bind-session :wk "bind session"))
 
 (defun agents-send-region-or-window-right ()

@@ -17,10 +17,6 @@
 ;; `*Native-compile-Log*'.
 (setq native-comp-async-report-warnings-errors t)
 
-;; Some packages' autoload files define transient menus at load time, so
-;; transient (bundled with Emacs) must be loaded before packages activate.
-(require 'transient)
-
 ;; Start in the home directory, not wherever Finder launched the app from
 ;; (which is inside /opt/homebrew for a brew-installed Emacs.app).
 (setq default-directory "~/"

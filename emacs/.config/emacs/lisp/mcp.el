@@ -8,9 +8,6 @@
 (require 'subr-x)
 (require 'tabulated-list)
 
-(defvar emacs-mcp-follow-mode nil
-  "When non-nil, reveal MCP file requests in a dedicated follow window.")
-
 (defvar emacs-mcp--request-root nil
   "Dynamically bound launch root for the current MCP request.")
 
@@ -168,12 +165,6 @@ Use `a' to always show the terminal instead."
         (pop-to-buffer (find-file-noselect target))
       (emacs-mcp-activity-show-agent))))
 
-(defun emacs-mcp-toggle-follow ()
-  "Toggle the MCP file-follow window."
-  (interactive)
-  (setq emacs-mcp-follow-mode (not emacs-mcp-follow-mode))
-  (message "AI follow mode %s" (if emacs-mcp-follow-mode "enabled" "disabled")))
-
 (defun emacs-mcp--activity-target (arguments root)
   (cond ((gethash "url" arguments) (gethash "url" arguments))
         ((when-let* ((path (gethash "path" arguments)))
@@ -278,26 +269,107 @@ one agent read a different project's files."
       (user-error "File does not exist: %s" path))
     path))
 
-(defun emacs-mcp--display-file (buffer)
-  (if emacs-mcp-follow-mode
-      (display-buffer buffer '((display-buffer-in-side-window)
-                               (side . bottom) (slot . 1)
-                               (window-height . 0.35)))
-    (display-buffer buffer)))
-
 (defun emacs-mcp--open-file (arguments)
   (let* ((path (emacs-mcp--file-path arguments))
-         (line (max 1 (or (gethash "line" arguments) 1)))
-         (buffer (find-file-noselect path))
-         (window (emacs-mcp--display-file buffer)))
-    (with-selected-window window
-      (goto-char (point-min))
-      (forward-line (1- line))
-      (recenter)
-      (when emacs-mcp-follow-mode
-        (auto-revert-mode 1)
-        (pulse-momentary-highlight-one-line (point))))
-    `((opened . t) (path . ,path) (line . ,line))))
+         (line (max 1 (or (gethash "line" arguments) 1))))
+    (find-file-noselect path)
+    `((opened . t) (path . ,path) (line . ,line) (displayed . :false))))
+
+(defun emacs-mcp--replace-exactly-once (old new index)
+  "Replace the sole occurrence of OLD with NEW, reporting errors for INDEX.
+Return the position of the replacement."
+  (goto-char (point-min))
+  (unless (search-forward old nil t)
+    (user-error "Edit %d: old_text was not found" index))
+  (let* ((end (point))
+         (start (- end (length old))))
+    (when (save-excursion
+            (goto-char (1+ start))
+            (search-forward old nil t))
+      (user-error "Edit %d: old_text matches more than once" index))
+    (delete-region start end)
+    (goto-char start)
+    (insert new)
+    start))
+
+(defun emacs-mcp--editable-file-buffer (path)
+  "Return PATH's visiting buffer after checking for local or disk changes."
+  (let ((buffer (get-file-buffer path)))
+    (when buffer
+      (with-current-buffer buffer
+        (when (buffer-modified-p)
+          (user-error "Buffer has unsaved changes: %s" path))
+        (unless (verify-visited-file-modtime buffer)
+          (user-error "File changed on disk since Emacs visited it: %s" path))))
+    (setq buffer (or buffer (find-file-noselect path)))
+    (with-current-buffer buffer
+      (when (buffer-modified-p)
+        (user-error "Buffer has unsaved changes: %s" path)))
+    buffer))
+
+(defun emacs-mcp--edit-file (arguments)
+  "Apply exact, sequential replacements through a live Emacs buffer.
+Reject dirty or stale buffers and ambiguous matches before changing anything."
+  (let* ((path (emacs-mcp--file-path arguments))
+         (edits (gethash "edits" arguments))
+         (buffer (emacs-mcp--editable-file-buffer path))
+         (first-marker nil)
+         (line nil))
+    (unless (and (vectorp edits) (> (length edits) 0))
+      (user-error "At least one edit is required"))
+    (with-current-buffer buffer
+      (save-restriction
+        (widen)
+        (let ((replacement (generate-new-buffer " *Emacs MCP edit*")))
+          (unwind-protect
+              (progn
+                (with-current-buffer replacement
+                  (insert (with-current-buffer buffer
+                            (buffer-substring-no-properties (point-min) (point-max)))))
+                (dotimes (index (length edits))
+                  (let* ((edit (aref edits index))
+                         (old (and (hash-table-p edit) (gethash "old_text" edit)))
+                         (new (and (hash-table-p edit) (gethash "new_text" edit))))
+                    (unless (and (stringp old) (not (string-empty-p old)) (stringp new))
+                      (user-error "Edit %d needs nonempty old_text and string new_text" (1+ index)))
+                    (with-current-buffer replacement
+                      (let ((position (emacs-mcp--replace-exactly-once old new (1+ index))))
+                        (unless first-marker (setq first-marker (copy-marker position)))))))
+                (setq line (with-current-buffer replacement
+                             (line-number-at-pos first-marker)))
+                (atomic-change-group
+                  (if (fboundp 'replace-region-contents)
+                      (replace-region-contents (point-min) (point-max) replacement)
+                    (with-no-warnings (replace-buffer-contents replacement))))
+                (save-buffer))
+            (kill-buffer replacement))))
+      `((edited . t) (path . ,path) (edits_applied . ,(length edits))
+        (line . ,line) (displayed . :false)))))
+
+(defun emacs-mcp--create-file (arguments)
+  "Create a file in the launch workspace through an Emacs buffer."
+  (let* ((root (emacs-mcp--workspace-root arguments))
+         (requested (gethash "path" arguments))
+         (content (gethash "content" arguments)))
+    (unless (and (stringp requested) (not (string-empty-p requested))
+                 (stringp content))
+      (user-error "A path and string content are required"))
+    (let* ((requested-path (expand-file-name requested root))
+           (parent (file-truename (file-name-directory requested-path)))
+           (path (expand-file-name (file-name-nondirectory requested-path) parent)))
+      (unless (file-in-directory-p parent root)
+        (user-error "Path is outside this agent's launch workspace"))
+      (when (or (file-exists-p path) (file-symlink-p path) (get-file-buffer path))
+        (user-error "File already exists or is visited: %s" path))
+      (let ((buffer (find-file-noselect path)))
+        (with-current-buffer buffer
+          (when (or (buffer-modified-p) (not (zerop (buffer-size))))
+            (user-error "New file buffer is not empty: %s" path))
+          (insert content)
+          (when (string-empty-p content) (set-buffer-modified-p t))
+          (save-buffer))
+        `((created . t) (path . ,path)
+          (displayed . :false))))))
 
 (defun emacs-mcp--read-file (arguments)
   (let* ((path (emacs-mcp--file-path arguments))
@@ -422,6 +494,8 @@ one agent read a different project's files."
                   ("context" (emacs-mcp--context arguments))
                   ("handoff_context" (emacs-mcp--handoff-context arguments))
                   ("open_file" (emacs-mcp--open-file arguments))
+                  ("edit_file" (emacs-mcp--edit-file arguments))
+                  ("create_file" (emacs-mcp--create-file arguments))
                   ("read_file" (emacs-mcp--read-file arguments))
                   ("browser_context" (emacs-mcp--browser-context arguments))
                   ("browser_open" (emacs-mcp--browser-open arguments))

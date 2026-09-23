@@ -1,7 +1,7 @@
 # herdr config for sessions run from Emacs (site-lisp/herdr, `herdr-config-file').
 # herdr started outside Emacs keeps using ~/.config/herdr/config.toml.
-# A session reads this when its server starts; restart the server to apply
-# changes (`herdr --session <s> server stop', then SPC a t).
+# Running sessions can reload this with `herdr --session <s> server reload-config`;
+# a new Emacs Herdr client picks it up when attached.
 # All options: `herdr --default-config'.
 
 onboarding = false
@@ -10,25 +10,22 @@ onboarding = false
 # Use the terminal's ANSI palette, which ghostel takes from the Emacs theme.
 name = "terminal"
 
-# The terminal theme draws selections with ANSI white, which is light in
-# dark Emacs themes and makes selected rows unreadable.  These come from
-# doom-winter-is-coming-dark-blue's faces; update them with the Emacs theme.
 [theme.custom]
-panel_bg = "reset"       # default background
-surface0 = "#062e5a"     # hl-line
-surface1 = "#2b4d72"     # region
-surface_dim = "#052951"  # mode-line
-overlay0 = "#7590a3"     # shadow
-overlay1 = "#8fadc1"
-text = "#a7dbf7"         # default foreground
-subtext0 = "#7590a3"
-accent = "#00bff9"       # keywords
-green = "#6bff81"        # success
-yellow = "#ffca28"       # warning
-red = "#ef5350"          # error
+panel_bg = "reset" # Keep the panel on the terminal's default background.
 
 [keys]
 prefix = "ctrl+a"
+# Emacs owns spaces. Herdr's keyboard stays within the selected space;
+# SPC a a creates agent tabs, and SPC a v navigates the space tree.
+new_workspace = ""
+new_worktree = ""
+workspace_picker = ""
+goto = ""
+rename_workspace = ""
+close_workspace = ""
+toggle_sidebar = ""
+navigate_workspace_up = ""
+navigate_workspace_down = ""
 # Emacs keeps C-h and C-l (window moves), so pane focus stays on the
 # prefix: C-a h/j/k/l.
 next_agent = "prefix+shift+j"
@@ -36,22 +33,14 @@ previous_agent = "prefix+shift+k"
 focus_agent = "prefix+alt+1..9"
 
 [ui]
-# Emacs asks for a name on SPC a a; ask inside herdr too so every space
-# has a real name.
+# Emacs names each space after its workspace and each new tab after its agent.
+# Keep a prompt for the mouse/menu path to avoid accidental unnamed spaces.
 prompt_new_workspace_name = true
 hide_tab_bar_when_single_tab = true
 show_agent_labels_on_pane_borders = true
-# The side window is narrow.
-sidebar_width = 22
-sidebar_min_width = 16
-
-# A space is the task you named (SPC a a); the agent row shows that plus
-# the title the agent gives its conversation, rather than its kind twice.
-[ui.sidebar.agents]
-rows = [["state_icon", "workspace"], ["terminal_title_stripped"]]
-
-[ui.sidebar.spaces]
-rows = [["state_icon", "workspace"], ["branch", "git_status"]]
+# Emacs shows spaces, agents, and terminals through SPC a v.
+sidebar_start_collapsed = true
+sidebar_collapsed_mode = "hidden"
 
 # Emacs already notifies when an agent needs you (`herdr-notify').
 [ui.toast]
