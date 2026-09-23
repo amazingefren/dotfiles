@@ -91,7 +91,8 @@ SPC f f, SPC f g, new shells, agent sessions, and the tree follow it."
   (let ((dir (file-name-as-directory (file-truename dir))))
     (puthash (persp-current-name) dir workspace-roots)
     (setq default-directory dir)
-    (tree-show-root dir)
+    (when (and (fboundp 'treemacs-current-visibility) (eq (treemacs-current-visibility) 'visible))
+      (save-selected-window (tree-show-root dir)))
     (message "Workspace root: %s" (abbreviate-file-name dir))))
 
 ;;; Open a project (or any folder) in its own perspective -------------------
