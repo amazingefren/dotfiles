@@ -10,6 +10,9 @@ import unittest
 
 SERVER = Path(__file__).resolve().parents[1] / "bin" / "emacs-mcp"
 EDITOR_TOOLS = {
+    "emacs_laya_submit",
+    "emacs_laya_result",
+    "emacs_laya_cancel",
     "emacs_context",
     "emacs_open_file",
     "emacs_edit_file",

@@ -13,6 +13,40 @@ from codex_subagents import metadata as codex_session_metadata
 
 TOOLS = [
     {
+        "name": "emacs_laya_submit",
+        "description": "Submit arbitrary state and named choice/score/noul questions to the Emacs decision harness. Local MLX is the default; Jev is used only when explicitly selected. Returns a job ID; poll emacs_laya_result later. Questions produce decisions, not generated text or actions.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "state": {"type": ["string", "object", "array"]},
+                "questions": {"type": "object", "minProperties": 1, "maxProperties": 64,
+                              "additionalProperties": {
+                                  "type": "object",
+                                  "properties": {"type": {"enum": ["choice", "score", "noul"]},
+                                                 "instructions": {"type": ["string", "object", "array"]},
+                                                 "criteria": {"type": ["object", "array"]}},
+                                  "required": ["type", "instructions"]}},
+                "backend": {"enum": ["mlx", "jev"], "default": "mlx"},
+                "model": {"type": "string", "description": "Optional checkpoint ID or configured local path; Jev model ID for backend jev."},
+                "revision": {"type": "string", "description": "Optional Hugging Face checkpoint revision."},
+                "allow_truncation": {"type": "boolean", "default": False,
+                                     "description": "Local input truncation is rejected unless explicitly allowed; diagnostics report it."},
+            },
+            "required": ["state", "questions"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "emacs_laya_result",
+        "description": "Retrieve this agent's LAYA job status and completed decision result. Pending jobs return promptly; wait before polling again.",
+        "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"], "additionalProperties": False},
+    },
+    {
+        "name": "emacs_laya_cancel",
+        "description": "Cancel this agent's LAYA job. Queued work is removed; already running work may finish but its result is discarded.",
+        "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"], "additionalProperties": False},
+    },
+    {
         "name": "emacs_context",
         "description": "Inspect Emacs's live workspace, active buffer, cursor, and visible windows.",
         "inputSchema": {"type": "object", "properties": {}},

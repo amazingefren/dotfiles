@@ -178,7 +178,10 @@ Use `a' to always show the terminal instead."
          (root (emacs-mcp--workspace-root arguments metadata))
          (id (format "%s" (emacs-mcp--agent-id arguments metadata)))
          (old (gethash id emacs-mcp--activity))
-         (diagnostics (and result (alist-get 'diagnostics result))))
+         (diagnostics (and result
+                           (if (hash-table-p result)
+                               (gethash "diagnostics" result)
+                             (alist-get 'diagnostics result)))))
     (puthash id
              (emacs-mcp-activity-create
               :id id
@@ -491,6 +494,8 @@ Reject dirty or stale buffers and ambiguous matches before changing anything."
                (default-directory emacs-mcp--request-root)
                (result
                 (pcase method
+                  ((or "laya_submit" "laya_result" "laya_cancel")
+                   (laya-mcp-dispatch method arguments))
                   ("context" (emacs-mcp--context arguments))
                   ("handoff_context" (emacs-mcp--handoff-context arguments))
                   ("open_file" (emacs-mcp--open-file arguments))
