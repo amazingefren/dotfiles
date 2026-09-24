@@ -14,8 +14,9 @@
   :if (featurep 'xwidget-internal)          ; only if this Emacs was built with xwidgets
   :commands (xwidget-webkit-browse-url)
   :custom
-  (browse-url-browser-function #'xwidget-webkit-browse-url)             ; links open inside Emacs...
+  (browse-url-browser-function #'browser-ask)                           ; links ask where to open...
   (browse-url-secondary-browser-function #'browse-url-default-macosx-browser) ; ...SPC u (C-u) first to force Safari
+  (browse-url-handlers '(("\\`https?://\\([^/]+\\.\\)?github\\.com" . browse-url-default-macosx-browser))) ; GitHub needs your logged-in browser
   :config
   (add-hook 'window-size-change-functions #'browser-resize-xwidgets))
 
@@ -41,6 +42,21 @@
      (display-buffer buffer '((display-buffer-in-direction)
                               (direction . right)
                               (window-width . 0.5))))))
+
+(defun browser-ask (url &rest _)
+  "Ask whether to open URL embedded, in the system browser, in EWW, or copy it.
+Callers that bind `browse-url-browser-function' themselves (feeds b/B) and
+URLs matching `browse-url-handlers' (GitHub) skip the question."
+  (pcase (car (read-multiple-choice
+               (format "Open %s" (truncate-string-to-width url 60 nil nil "…"))
+               '((?x "xwidget" "Embedded WebKit, in a split")
+                 (?b "browser" "macOS default browser")
+                 (?e "eww"     "Text browser")
+                 (?c "copy"    "Copy the URL"))))
+    (?x (browser-open url))
+    (?b (browse-url-default-macosx-browser url))
+    (?e (eww url))
+    (?c (kill-new url) (message "Copied %s" url))))
 
 (defun browser-current-url ()
   "URL of the page in the current buffer, or the URL at point, or nil."

@@ -14,7 +14,9 @@
     (spotify-client-id
      . "op://Private/Spotify/Emacs Smudge Creds/Client ID")
     (spotify-client-secret
-     . "op://Private/Spotify/Emacs Smudge Creds/Client Secret"))
+     . "op://Private/Spotify/Emacs Smudge Creds/Client Secret")
+    (github-forge-token
+     . "op://Private/GitHub - amazingefren/Forge Token"))
   "Named 1Password references used by this Emacs configuration."
   :type '(alist :key-type symbol :value-type string))
 

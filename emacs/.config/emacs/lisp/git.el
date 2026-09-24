@@ -26,11 +26,19 @@
     (interactive)
     (magit-diff-range (format "%s...HEAD" (or (magit-main-branch) "main")))))
 
-;; Forge reads its GitHub token from ~/.authinfo.
 (use-package forge
   :after magit
   :custom
-  (forge-owned-accounts '(("amazingefren"))))
+  (forge-owned-accounts '(("amazingefren")))
+  :config
+  (defun git-github-username (orig host &optional forge)
+    (if (memq forge '(nil github)) "amazingefren" (funcall orig host forge)))
+  (defun git-github-token (orig host username package &optional nocreate forge)
+    (if (and (memq forge '(nil github)) (equal host "api.github.com"))
+        (op-secret 'github-forge-token)
+      (funcall orig host username package nocreate forge)))
+  (advice-add 'ghub--username :around #'git-github-username)
+  (advice-add 'ghub--token :around #'git-github-token))
 
 ;; diff-hl: changed / added / removed markers in the left fringe (gitsigns).
 (use-package diff-hl

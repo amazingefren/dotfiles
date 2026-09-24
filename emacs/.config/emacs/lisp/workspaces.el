@@ -12,6 +12,14 @@
   :config
   (persp-mode 1))
 
+;; Close an open transient menu (magit, forge @) before switching workspace.
+;; Menus like forge's let other commands run while they stay open, so
+;; without this the menu follows you into the next workspace.
+(defun workspace-close-menus ()
+  (when (bound-and-true-p transient--prefix)
+    (transient--emergency-exit :workspace-switch)))
+(add-hook 'persp-before-switch-hook #'workspace-close-menus)
+
 ;; Show the current perspective's buffers in SPC b b. Press b then SPC in the
 ;; picker to see every buffer instead.
 (with-eval-after-load 'consult
