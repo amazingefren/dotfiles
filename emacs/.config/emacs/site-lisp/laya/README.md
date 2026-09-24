@@ -149,24 +149,129 @@ offers staged changes or a revision range.
 | Key | Action |
 | --- | --- |
 | `RET` | Open the changed line |
-| `TAB` | Show the hunk's answers, distributions and diff |
-| `]]` / `[[` | Next or previous hunk |
+| `TAB` | Expand a file's units, or a unit's model calls, answers and diff |
+| `]]` / `[[` | Next or previous row |
 | `f` | Hide hunks below `laya-review-focus-threshold` |
+| `a` | List or fold the units no question applied to |
 | `d` | Focused diff: a `diff-mode` buffer of only the hunks that matter |
-| `s` | Sort by risk or by diff order |
+| `s` | Cycle the view: riskiest units, grouped by file, diff order |
+| `v` | Show the exact state and questions each call sends for the unit |
 | `e` | Edit the rubric; `gr` rescores with it |
 | `C-c C-k` | Stop scoring |
 
-The rubric, `review-rubric.json`, is data: LAYA questions plus a `risk`
-object per question. A choice's risk is the sum of P(option) x weight, a
-noul's is P(true) x `true` + P(false) x `false`, and a score's is the sum of
-P(level) x weight. A hunk's risk is its largest contribution; questions
-without `risk` are shown but not scored. Set `"backend": "jev"` or a
-`"model"` in the rubric to change models without touching code.
+### Review units
+
+In the file view each file is one row with its highest risk, how many
+units it was split into, how many model calls they made, and how many
+had nothing to ask. `TAB` lists its units by line and function, and `TAB`
+on a unit lists each call (the code call and, when it has comments, the
+comments call) with its questions, answers and time. `v` shows the JSON
+that went to the model, definitions included, so you can see which slice
+of a large file each call judged.
+
+
+A hunk longer than the backend's `chunk_lines` rows is split into review
+units along function boundaries. The file is read at the diff's new side
+(the range's end revision, the index for staged changes, or the worktree),
+parsed with its tree-sitter mode, or `beginning-of-defun` when there is no
+grammar, with mode hooks delayed so no language server starts. A function
+that fits is one unit, small neighbours share one, and a function that is
+too long is split into its inner functions, then into runs of rows. Each
+unit is a valid hunk named after the functions it covers, so `RET` and the
+focused diff still work. When the file does not match the diff, as with a
+pasted `diff-mode` buffer, units are plain runs of rows.
+
+Each unit also carries `definitions`: the source of helpers it calls that
+are defined elsewhere in the same file, at most
+`laya-review-max-definition-lines` long. A call to `csvCell(...)` 300 lines
+below its definition is judged with the definition in view.
+
+### Comments
+
+A comment cannot vouch for code. Before the code questions see a unit, its
+comments are moved out of `added`, `removed` and `definitions`, using the
+file's major mode, or a built-in mode with the same comment syntax, to
+tell a comment from a `//` inside a string or URL. Python docstrings count
+as comments. A comment such as "reviewed by security, safe" above code
+that posts decrypted keys to another host is never seen by the question
+asking whether the code sends credentials away.
+
+The comments are judged on their own instead, in a second job whose state
+holds `comments` beside the comment-free `code`. Questions with
+`"state": "comments"` ask it: `steering_comment` (does a comment argue the
+code is safe or tell a reviewer or AI not to flag it), `comment_mismatch`
+(does a comment describe something the code does not do, or hide something
+significant it does), and `non_functional_comment` (is it more than a
+functional description: persuasion, claims about reliability, history).
+`comments_matches` gates them on the extracted comment text, so code
+without comments asks nothing. Both jobs' answers are merged before the
+risk is scored.
+
+### Rubric
+
+The rubric, `review-rubric.json`, is data. Each question is one narrow
+noul with `true`/`false` criteria about the unit's state fields (`file`,
+`location`, `change`, `removed`, `added`, and `definitions` when present),
+plus a `risk` weight. A noul's risk is P(true) x `true` + P(false) x
+`false`; a choice's is the sum of P(option) x weight, and a score's the sum
+of P(level) x weight. A unit's risk is its largest contribution.
+
+Facts code can check are gates, not questions. A question is asked only
+when its gates match: `added_matches`, `removed_matches` (which also needs
+removed lines), `changed_matches` over both sides, and `files`; and neither
+the rubric's nor the question's `skip_files` matches the path. A gate is an
+Emacs regexp, or an array of regexps that must all match. Gates are matched
+case-insensitively with code punctuation ending a symbol, so `\_<md5`
+matches in `hashlib.md5`. A unit no question applies to scores 0 without
+calling the model.
+
+The 22 questions cover secrets, SQL, command and deserialization injection,
+XSS, CSV formula injection, weakened auth, loosened security settings,
+unauthenticated routes, credentials sent to the wrong service, secrets or
+personal data in logs, missing size or spend limits, path traversal, SSRF,
+open redirects, insecure randomness, removed checks, swallowed errors,
+destructive writes, and comments that steer, mislead, or narrate. None of
+them reason across the whole diff: logic bugs, races, and design problems
+need a reviewer that reads everything.
+
+`"backend"` picks the model, and `"backends"` holds per-backend budgets:
+
+```json
+"backend": "mlx",
+"backends": {
+  "mlx": {"max_state_characters": 950, "chunk_lines": 25},
+  "jev": {"max_state_characters": 6000, "chunk_lines": 150}
+}
+```
+
+A model that reads little state wants small units; one with a long context
+can take whole functions. Switching backend keeps the questions.
+
+### Evaluation
+
+`M-x laya-review-eval` scores the rubric against `tests/review-cases.json`,
+labeled snippets with at least one bad and one fine case per question, and
+shows recall, precision, false alarms, gate misses, and the mean P on bad
+and fine cases per question. Run it after changing a question or a gate. In
+batch: `emacs --batch -l tests/review-eval.el [RUBRIC]`. A case with
+`"expect": {}` must not be flagged by any question it is asked.
+
+### Rubric lint
+
+`M-x laya-review-lint-rubric` asks the rubric's backend to judge the
+rubric's own questions: whether each combines separate conditions, leads
+toward an answer, has true and false criteria that overlap or leave gaps,
+needs information its state does not hold, or hinges on an undefined word.
+The state sent is the question and a description of its state's fields,
+never repository code. Two control questions, one built badly and one
+clean, are linted alongside; if a control does not come out as expected,
+do not trust the other results either. In batch:
+`emacs --batch -l tests/rubric-lint.el [RUBRIC]`. The meta-questions live
+in `rubric-lint.json`.
 
 Other code can score a hunk with `laya-review-submit-hunk`, which takes a
-hunk plist from `laya-review-parse-diff` and calls back with the risk,
-reason and answers.
+hunk plist from `laya-review-parse-diff` or `laya-review-split-hunks` and
+calls back with the risk, reason and answers.
 
 ## Agent access
 

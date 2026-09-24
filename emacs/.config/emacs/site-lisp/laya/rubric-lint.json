@@ -1,0 +1,72 @@
+{
+  "format": "laya-rubric-lint-v1",
+  "meta_questions": {
+    "compound": {
+      "type": "noul",
+      "instructions": "Does the yes/no question in `question.instructions` combine two or more separate conditions, so that a case meeting only one of them has no clear answer?",
+      "criteria": {
+        "true": "Such as \"Is the input unvalidated and the output unescaped?\" or a list of unrelated failures joined by or, where each could be its own question",
+        "false": "One condition, possibly with examples or a list of forms of that same condition"
+      }
+    },
+    "leading": {
+      "type": "noul",
+      "instructions": "Does the wording of `question` presume its answer or push the model toward yes or no, for example with loaded words, a rhetorical form, or an assumption that something is wrong?",
+      "criteria": {
+        "true": "Such as \"Isn't this obviously dangerous?\", \"How badly does this leak data?\", or calling the code suspicious before asking",
+        "false": "Neutral wording that a case could plainly answer either way"
+      }
+    },
+    "criteria_gap": {
+      "type": "noul",
+      "instructions": "Do `question.criteria.true` and `question.criteria.false` overlap, or leave a common kind of case that fits neither?",
+      "criteria": {
+        "true": "A realistic case would match both descriptions, or neither",
+        "false": "The two descriptions split realistic cases cleanly between them"
+      }
+    },
+    "unanswerable": {
+      "type": "noul",
+      "instructions": "Does answering `question` need information that none of the fields listed in `state_fields` contain?",
+      "criteria": {
+        "true": "Such as asking about runtime behaviour, other files, or who wrote the code when the state holds only a snippet and its file name",
+        "false": "Everything the question needs is in the listed fields"
+      }
+    },
+    "vague_terms": {
+      "type": "noul",
+      "instructions": "Does `question` hinge on a term such as significant, sensitive, unsafe, or properly without defining it or giving an example?",
+      "criteria": {
+        "true": "The answer turns on an undefined judgment word",
+        "false": "Key terms are defined, bounded, or illustrated with examples"
+      }
+    }
+  },
+  "controls": {
+    "control_compound_leading": {
+      "type": "noul",
+      "instructions": "Isn't this obviously insecure code that is badly written and also leaks secrets or crashes?",
+      "criteria": {
+        "true": "It is bad",
+        "false": "It is fine"
+      }
+    },
+    "control_clean": {
+      "type": "noul",
+      "instructions": "Does `added` call Math.random?",
+      "criteria": {
+        "true": "`added` contains a call to Math.random",
+        "false": "`added` contains no call to Math.random"
+      }
+    }
+  },
+  "control_expect": {
+    "control_compound_leading": [
+      "compound",
+      "leading",
+      "criteria_gap",
+      "vague_terms"
+    ],
+    "control_clean": []
+  }
+}
