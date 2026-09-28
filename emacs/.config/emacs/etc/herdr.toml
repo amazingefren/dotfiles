@@ -12,6 +12,12 @@ name = "terminal"
 
 [theme.custom]
 panel_bg = "reset" # Keep the panel on the terminal's default background.
+# Text in the terminal's default foreground too.  "terminal" otherwise draws
+# it in bright white, which light themes (e.g. ef-melissa-light) set to the
+# background color, so tab names vanish.  overlay1 is the tab names.
+text = "reset"
+subtext0 = "reset"
+overlay1 = "reset"
 
 [keys]
 prefix = "ctrl+a"

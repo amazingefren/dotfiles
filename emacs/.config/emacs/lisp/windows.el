@@ -22,6 +22,9 @@
 ;;; Keybindings
 
 (leader
+  ;; Back out of whatever a command just showed: closes a window it opened,
+  ;; or brings back the buffer it replaced (e.g. the agenda after RET).
+  "q"  '(quit-window :wk "close / back")
   "w"  '(:ignore t :wk "window")
   "w=" '(balance-windows :wk "balance")
   "w+" '(enlarge-window :wk "taller")

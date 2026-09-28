@@ -27,4 +27,26 @@
     (with-temp-file themes-file (prin1 theme (current-buffer)))
     (message "Theme %s saved" theme)))
 
+;; Short-lived pop-ups (which-key, Org's letter menus) open right under other
+;; windows; a background one shade off the theme's sets them apart.
+(defvar-local themes--popup-tint nil "Face-remap cookies of this buffer's tint.")
+
+(defun themes-popup-tint ()
+  "Give the current buffer a background one shade off the theme's."
+  (require 'color)
+  (mapc #'face-remap-remove-relative themes--popup-tint)
+  (let ((bg (face-background 'default nil t)))
+    (when (color-defined-p bg)
+      (let ((shade (if (eq (frame-parameter nil 'background-mode) 'dark)
+                       (color-lighten-name bg 8)
+                     (color-darken-name bg 4))))
+        (setq themes--popup-tint
+              (list (face-remap-add-relative 'default :background shade)
+                    (face-remap-add-relative 'fringe :background shade)))))))
+
+(add-hook 'enable-theme-functions
+          (lambda (_theme)
+            (dolist (b (buffer-list))
+              (with-current-buffer b (when themes--popup-tint (themes-popup-tint))))))
+
 (themes-load-saved 'modus-vivendi)   ; the SPC h r t binding lives in vim.el

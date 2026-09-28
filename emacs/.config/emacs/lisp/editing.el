@@ -22,6 +22,8 @@
   :custom
   (dtrt-indent-verbosity 0)
   (dtrt-indent-lighter nil)
+  ;; Org needs tab-width 8 and warns whenever a guess changes it.
+  (dtrt-indent-global-modes '((not org-mode) prog-mode text-mode))
   :config
   (add-to-list 'dtrt-indent-hook-generic-mapping-list '(t tab-width))
   (setf (alist-get 'typescript-ts-base-mode dtrt-indent-hook-mapping-list)

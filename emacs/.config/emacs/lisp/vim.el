@@ -92,7 +92,9 @@
 (use-package which-key
   :ensure nil
   :custom (which-key-idle-delay 0.4)   ; seconds before the popup appears
-  :config (which-key-mode 1))
+  :config
+  (add-hook 'which-key-init-buffer-hook #'themes-popup-tint)
+  (which-key-mode 1))
 
 ;; general: a nicer way to define keybinds. Creates the `leader' macro used
 ;; here and in every other lisp/ file to bind SPC keys.
