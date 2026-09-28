@@ -2,6 +2,8 @@
 
 Claude's hook input supplies session and subagent IDs.  This stores only those
 IDs and short display labels; it never stores prompts or transcript content.
+For each live session, `--list` also reads the end of its transcript for
+metadata only: the last turn's token usage, model, and git branch.
 """
 
 import json
@@ -55,6 +57,44 @@ def record(event, environment=None):
         os.write(descriptor, (json.dumps(item, separators=(",", ":")) + "\n").encode())
     finally:
         os.close(descriptor)
+
+
+def transcript_path(session_id):
+    """Claude keeps each session's transcript as projects/<dir>/<session id>.jsonl."""
+    root = Path(os.environ.get("CLAUDE_CONFIG_DIR", Path.home() / ".claude")) / "projects"
+    return next(root.glob(f"*/{session_id}.jsonl"), None)
+
+
+def transcript_stats(path, tail=262144):
+    """Context in use, model, branch, and last-activity time, from the log tail.
+
+    The context is what the last main-thread turn sent: its fresh, cache-read,
+    and cache-written input tokens.  Only these fields are read.
+    """
+    stats = {}
+    try:
+        stats["last_ns"] = path.stat().st_mtime_ns
+        with path.open("rb") as stream:
+            stream.seek(0, os.SEEK_END)
+            stream.seek(max(0, stream.tell() - tail))
+            lines = stream.read().splitlines()
+    except (OSError, AttributeError):
+        return stats
+    for line in reversed(lines):
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        message = entry.get("message") if isinstance(entry, dict) else None
+        if (entry.get("type") == "assistant" and not entry.get("isSidechain")
+                and isinstance(message, dict) and isinstance(message.get("usage"), dict)):
+            usage = message["usage"]
+            stats["context_tokens"] = sum(usage.get(key) or 0 for key in (
+                "input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
+            stats["model"] = message.get("model")
+            stats["branch"] = entry.get("gitBranch")
+            break
+    return stats
 
 
 def snapshot():
@@ -117,8 +157,10 @@ def snapshot():
                 for key in list(table):
                     if key[0] == session_id:
                         del table[key]
-    roots = [{"id": session_id, "session": event["herdr_session"],
-              "pane": event["pane"]} for session_id, event in sessions.items()]
+    roots = [dict(transcript_stats(transcript_path(session_id)),
+                  id=session_id, session=event["herdr_session"],
+                  pane=event["pane"], started_ns=event.get("time_ns"))
+             for session_id, event in sessions.items()]
     children = [{"id": agent_id, "parent_thread_id": session_id,
                  "role": event.get("agent_type") or "subagent",
                  "status": "working", "id_kind": "agent"}

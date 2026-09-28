@@ -41,6 +41,8 @@
 (declare-function persp-switch "perspective")
 (declare-function ghostel-exec "ghostel")
 (declare-function workspace-root "workspaces")
+(declare-function workspace-names "workspaces")
+(defvar workspace-roots)
 (declare-function emacs-mcp-activity-refresh "mcp")
 (defvar workspace-status-function)
 ;; Declared here so the dynamic binding in `herdr-start' remains dynamic even
@@ -117,6 +119,10 @@ When nil, ask on first use and save the choice in `custom-file'."
 
 (defvar herdr--claude-workflows (make-hash-table :test #'equal)
   "Claude session ID -> last reported workflow runs.")
+
+(defvar herdr--claude-stats (make-hash-table :test #'equal)
+  "Claude session ID -> transcript stats: context_tokens, model, branch,
+started_ns, last_ns (see bin/claude_subagents.py).")
 
 (defun herdr-register-codex-thread (session pane thread-id)
   "Associate SESSION and PANE with a root Codex THREAD-ID."
@@ -221,10 +227,20 @@ Call ON-SUCCESS with the parsed result, or ON-ERROR with the error data."
 (defun herdr--workspace ()
   (if (fboundp 'persp-current-name) (persp-current-name) "main"))
 
+(defconst herdr-session-name-max 40
+  "Longest session name `herdr--session-name-for' returns.
+herdr's sockets live at ~/.config/herdr/sessions/NAME/herdr-client.sock,
+and macOS caps a socket path at 104 bytes; past that the server won't start.")
+
 (defun herdr--session-name-for (workspace)
-  "A herdr session name derived from WORKSPACE."
+  "A herdr session name derived from WORKSPACE.
+A name too long for herdr's socket path is cut short and given a hash of
+the full name, so it stays unique."
   (let ((s (replace-regexp-in-string "[^A-Za-z0-9_-]" "-" workspace)))
-    (if (string-empty-p s) "emacs" s)))
+    (cond ((string-empty-p s) "emacs")
+          ((<= (length s) herdr-session-name-max) s)
+          (t (format "%s-%s" (substring s 0 (- herdr-session-name-max 7))
+                     (substring (md5 workspace) 0 6))))))
 
 ;;;###autoload
 (defun herdr-bind-session (session)
@@ -240,6 +256,65 @@ Prompts with the running sessions plus a fresh one named after the workspace."
   (herdr--poll)
   (message "Workspace %s -> herdr session %s" (herdr--workspace) session)
   session)
+
+(defun herdr-delete-workspace-session (workspace)
+  "Stop and delete WORKSPACE's herdr session, with every agent in it.
+For closing a workspace for good; its client buffer is killed too."
+  (let ((session (or (gethash workspace herdr--workspace-sessions)
+                     (herdr--session-name-for workspace))))
+    ;; Close the client first, so it isn't left showing a dead server.
+    (when-let* ((buffer (get-buffer (herdr--buffer-name session))))
+      (let ((kill-buffer-query-functions nil)) (kill-buffer buffer)))
+    (when (assoc session (herdr--sessions))
+      (when (herdr--session-running-p session)
+        (call-process herdr-program nil nil nil "session" "stop" session)
+        (cl-loop repeat 50
+                 while (herdr--session-running-p session)
+                 do (sleep-for 0.1)))
+      (herdr--delete-session session))
+    (remhash workspace herdr--workspace-sessions)
+    (remhash session herdr--agents)))
+
+(defun herdr--session-dir (session)
+  "SESSION's state directory, from `herdr session list'."
+  (with-temp-buffer
+    (call-process herdr-program nil t nil "session" "list")
+    (goto-char (point-min))
+    (when (re-search-forward (concat "^" (regexp-quote session) "[ \t]+[a-z]+[ \t]+\\([^ \t\n]+\\)") nil t)
+      (match-string 1))))
+
+(defun herdr--saved-spaces (session)
+  "SESSION's spaces as (LABEL . CWD): live if it runs, else from session.json."
+  (if (herdr--session-running-p session)
+      ;; A space has no folder of its own over the API; its panes start in it.
+      (cl-loop for space in (alist-get 'workspaces (herdr--run session "workspace" "list"))
+               for panes = (alist-get 'panes (herdr--run session "pane" "list" "--workspace"
+                                                          (alist-get 'workspace_id space)))
+               collect (cons (alist-get 'label space) (alist-get 'cwd (car panes))))
+    (when-let* ((dir (herdr--session-dir session))
+                (file (expand-file-name "session.json" dir))
+                ((file-readable-p file)))
+      (cl-loop for space across (alist-get 'workspaces (json-read-file file) [])
+               collect (cons (alist-get 'custom_name space) (alist-get 'identity_cwd space))))))
+
+(defun herdr-workspace-children (project)
+  "Spaces in herdr labelled PROJECT@NAME, as (LABEL CWD SESSION).
+Only sessions named after one of PROJECT's children are read: their names
+start with PROJECT's session name and a dash (`herdr--session-name-for')."
+  (let* ((prefix (concat (herdr--session-name-for project) "-"))
+         (prefix (substring prefix 0 (min (length prefix) (- herdr-session-name-max 7)))))
+    (cl-loop for (session . _running) in (herdr--sessions)
+             when (string-prefix-p prefix session)
+             append (cl-loop for (label . cwd) in (ignore-errors (herdr--saved-spaces session))
+                             when (and (stringp label) (stringp cwd)
+                                       (string-prefix-p (concat project "@") label))
+                             collect (list label cwd session)))))
+
+(defun herdr-remember-session (workspace session)
+  "Bind WORKSPACE to herdr SESSION without starting it.
+Its agent counts show as soon as the session runs; the first herdr command
+in WORKSPACE starts it if it is stopped."
+  (puthash workspace session herdr--workspace-sessions))
 
 (defun herdr--session ()
   "This workspace's session, using its name by default.
@@ -358,15 +433,36 @@ Preserve user-edited tab names and only send a rename when a label changes."
 
 (defun herdr--space (session workspace root agent-name)
   "Find WORKSPACE's Herdr space in SESSION, or create it at ROOT.
-Return (SPACE-ID . ROOT-PANE-ID); the pane is non-nil only for a new space."
+Return (SPACE-ID . PANE-ID).  The pane is non-nil for a new space, and for
+a space that holds only its first shell, untouched (see `herdr-ensure-space'):
+the agent takes that pane and tab rather than leaving the shell behind."
   (if-let* ((space (herdr--find-space session workspace root)))
-      (cons (alist-get 'workspace_id space) nil)
+      (let* ((id (alist-get 'workspace_id space))
+             (panes (alist-get 'panes (herdr--run session "pane" "list" "--workspace" id)))
+             (pane (car panes)))
+        (if (and pane (null (cdr panes)) (herdr--idle-pane-p session pane))
+            (progn (herdr--run session "tab" "rename" (alist-get 'tab_id pane) agent-name)
+                   (cons id (alist-get 'pane_id pane)))
+          (cons id nil)))
     (let ((created (herdr--run session "workspace" "create"
                                "--cwd" root "--label" workspace "--focus")))
       (herdr--run session "tab" "rename"
                   (alist-get 'tab_id (alist-get 'tab created)) agent-name)
       (cons (alist-get 'workspace_id (alist-get 'workspace created))
             (alist-get 'pane_id (alist-get 'root_pane created))))))
+
+;;;###autoload
+(defun herdr-ensure-space ()
+  "Make sure the current workspace has its herdr session and space.
+A workspace with a space is found again after Emacs restarts (see
+`herdr-workspace-children'), even before any agent runs in it.  The space
+starts with one shell, which the first agent then takes over."
+  (let* ((session (herdr--session))
+         (workspace (herdr--workspace))
+         (root (directory-file-name (expand-file-name (herdr--root)))))
+    (unless (herdr--find-space session workspace root)
+      (herdr--run session "workspace" "create" "--cwd" root "--label" workspace "--no-focus"))
+    (herdr--poll)))
 
 ;;;###autoload
 (defun herdr-start (kind name)
@@ -781,10 +877,12 @@ a space is idle when every pane in it is a shell at its prompt, with no agent."
      " ")))
 
 (defun herdr-workspace-glyph (workspace)
-  "Tab-bar glyph for WORKSPACE from its session's agent states, e.g. \"●2◆1\"."
-  (if-let* ((session (gethash workspace herdr--workspace-sessions)))
-      (herdr--agent-count-glyphs (gethash session herdr--agents))
-    ""))
+  "Tab-bar glyph for WORKSPACE from its session's agent states, e.g. \"●2◆1\".
+WORKSPACE may be a list of workspaces, whose agents are counted together."
+  (herdr--agent-count-glyphs
+   (cl-loop for ws in (ensure-list workspace)
+            for session = (gethash ws herdr--workspace-sessions)
+            when session append (gethash session herdr--agents))))
 
 ;;;; Overview
 
@@ -825,9 +923,75 @@ Cache the query briefly to avoid repeated process inspection."
     (define-key map [mouse-3] #'herdr-overview-menu)
     map))
 
+(defcustom herdr-context-window 1000000
+  "Context window, in tokens, the overview measures Claude's context against."
+  :type 'integer)
+
 (defconst herdr-overview--columns
-  [("Space / pane" 32 nil) ("Kind" 8 nil) ("State" 15 nil) ("Activity" 40 nil)]
+  [("Project / space / pane" 38 nil) ("Kind" 8 nil) ("State" 13 nil)
+   ("Context" 16 nil :right-align t) ("Model" 9 nil) ("Branch" 24 nil)
+   ("Up" 5 nil :right-align t) ("Last" 5 nil :right-align t) ("Activity" 30 nil)]
   "Columns in the Herdr overview.")
+
+(defun herdr-overview--cells (name kind state &optional activity stats)
+  "An overview row's cells.  STATS is a plist of :context :model :branch :up :last."
+  (vector name kind state
+          (or (plist-get stats :context) "") (or (plist-get stats :model) "")
+          (or (plist-get stats :branch) "") (or (plist-get stats :up) "")
+          (or (plist-get stats :last) "") (or activity "")))
+
+(defun herdr-overview--age (ns)
+  "Time since NS (nanoseconds since the epoch), as 45s, 12m, 3h or 2d."
+  (if (not (numberp ns)) ""
+    (let ((s (max 0 (- (float-time) (/ ns 1e9)))))
+      (propertize (cond ((< s 60) (format "%ds" s)) ((< s 3600) (format "%dm" (/ s 60)))
+                        ((< s 86400) (format "%dh" (/ s 3600))) (t (format "%dd" (/ s 86400))))
+                  'face 'shadow))))
+
+(defun herdr-overview--context (tokens)
+  "TOKENS of context as \"239k ▰▰▱▱▱ 24%\", colored as it fills."
+  (if (not (numberp tokens)) ""
+    (let* ((ratio (min 1.0 (/ (float tokens) herdr-context-window)))
+           (filled (round (* ratio 5)))
+           (face (cond ((>= ratio 0.8) 'error) ((>= ratio 0.5) 'warning) (t 'success))))
+      (concat (format "%dk " (round tokens 1000))
+              (propertize (make-string filled ?▰) 'face face)
+              (propertize (make-string (- 5 filled) ?▱) 'face 'shadow)
+              (format " %2d%%" (round (* 100 ratio)))))))
+
+(defun herdr-overview--model (model)
+  "MODEL shortened for the overview: claude-opus-5-5 -> opus 5.5."
+  (if (not (stringp model)) ""
+    (let ((m (replace-regexp-in-string "\\`claude-" "" model)))
+      (if (string-match "\\`\\([a-z]+\\)-\\([0-9]+\\)-\\([0-9]+\\)" m)
+          (format "%s %s.%s" (match-string 1 m) (match-string 2 m) (match-string 3 m))
+        m))))
+
+(defun herdr-overview--agent-stats (session agent)
+  "Stats plist for AGENT in SESSION, from its Claude transcript."
+  (when-let* ((root (herdr-overview--root session agent))
+              (stats (gethash root herdr--claude-stats)))
+    (list :context (herdr-overview--context (alist-get 'context_tokens stats))
+          :model (herdr-overview--model (alist-get 'model stats))
+          :branch (or (alist-get 'branch stats) "")
+          :up (herdr-overview--age (alist-get 'started_ns stats))
+          :last (herdr-overview--age (alist-get 'last_ns stats)))))
+
+(defun herdr--git-branch (dir)
+  "DIR's checked-out branch, read from .git/HEAD (worktrees too), or nil."
+  (ignore-errors
+    (let* ((dot (expand-file-name ".git" dir))
+           (gitdir (if (file-regular-p dot)
+                       (with-temp-buffer
+                         (insert-file-contents dot)
+                         (and (re-search-forward "^gitdir: \\(.*\\)$" nil t)
+                              (expand-file-name (match-string 1) dir)))
+                     dot))
+           (head (with-temp-buffer
+                   (insert-file-contents (expand-file-name "HEAD" gitdir))
+                   (string-trim (buffer-string)))))
+      (if (string-prefix-p "ref: refs/heads/" head) (substring head 16)
+        (substring head 0 (min 8 (length head)))))))
 
 (defvar-local herdr-overview--collapsed nil
   "Space keys hidden in this overview buffer.")
@@ -889,11 +1053,12 @@ Cache the query briefly to avoid repeated process inspection."
          `([,(pcase kind
                 ((or 'subagent 'task 'workflow) "Show parent agent")
                 ('space "Visit space")
+                ('project "Visit project")
                 ('agent "Visit agent")
                 (_ "Visit shell"))
             herdr-overview-visit t])
          (pcase kind
-           ('space '(["Fold / expand" herdr-overview-toggle-space t]))
+           ((or 'space 'project) '(["Fold / expand" herdr-overview-toggle-space t]))
            ((or 'agent 'terminal)
             `(["Rename" herdr-overview-rename t]
               [,(if (eq kind 'agent) "Kill agent" "Close shell")
@@ -928,20 +1093,20 @@ Cache the query briefly to avoid repeated process inspection."
     (user-error "Select a Herdr space or pane"))
   (pcase-let ((`(,kind ,ws ,session ,id . ,rest) row))
     (let* ((space-id (if (eq kind 'space) id (cadr rest)))
-           (key (list ws session space-id)))
+           (key (if (eq kind 'project) (list 'project ws) (list ws session space-id))))
       (puthash key (not (gethash key herdr-overview--collapsed))
                herdr-overview--collapsed)
       (herdr-overview-refresh)
       (goto-char (point-min))
       (while (and (not (eobp))
                   (not (equal (tabulated-list-get-id)
-                              (list 'space ws session space-id))))
+                              (if (eq kind 'project) row (list 'space ws session space-id)))))
         (forward-line 1)))))
 
 (defun herdr-overview--button-action (button)
   "Activate the space or pane associated with BUTTON."
   (let ((row (button-get button 'herdr-row)))
-    (if (eq (car row) 'space)
+    (if (memq (car row) '(space project))
         (herdr-overview-toggle-space row)
       (herdr-overview-visit row))))
 
@@ -961,6 +1126,7 @@ Cache the query briefly to avoid repeated process inspection."
     (clrhash herdr--claude-sessions)
     (clrhash herdr--claude-tasks)
     (clrhash herdr--claude-workflows)
+    (clrhash herdr--claude-stats)
     (when (and roots (file-readable-p program))
       (with-temp-buffer
         (when (eq 0 (apply #'call-process "python3" nil t nil program roots))
@@ -977,7 +1143,8 @@ Cache the query briefly to avoid repeated process inspection."
                                           :null-object nil)))
             (dolist (root (alist-get 'roots state))
               (puthash (cons (alist-get 'session root) (alist-get 'pane root))
-                       (alist-get 'id root) herdr--claude-sessions))
+                       (alist-get 'id root) herdr--claude-sessions)
+              (puthash (alist-get 'id root) root herdr--claude-stats))
             (dolist (child (alist-get 'children state))
               (push child (gethash (alist-get 'parent_thread_id child) children)))
             (dolist (task (alist-get 'tasks state))
@@ -1013,13 +1180,13 @@ Cache the query briefly to avoid repeated process inspection."
                        role "subagent"))
              (row (list 'subagent ws session id pane space parent)))
         (push (list row
-                    (vector (herdr-overview--button
-                             (concat (propertize (concat prefix (if last "└─ " "├─ "))
-                                                 'face 'shadow)
-                                     name)
-                             row (format "Show parent agent · %s %s" id-type id))
-                            "subagent" (or (alist-get 'status child) "")
-                            (or path (format "%s %s" id-type short-id))))
+                    (herdr-overview--cells
+                     (herdr-overview--button
+                      (concat (propertize (concat prefix (if last "└─ " "├─ ")) 'face 'shadow)
+                              name)
+                      row (format "Show parent agent · %s %s" id-type id))
+                     "subagent" (or (alist-get 'status child) "")
+                     (or path (format "%s %s" id-type short-id))))
               rows)
         (setq rows (nconc (nreverse (herdr-overview--subagent-rows
                                     children id ws session pane space
@@ -1044,15 +1211,14 @@ Cache the query briefly to avoid repeated process inspection."
              (row (list kind ws session id pane space root))
              (title (or (alist-get 'title record) id)))
         (push (list row
-                    (vector (herdr-overview--button
-                             (concat (propertize
-                                      (concat prefix (if last "└─ " "├─ "))
-                                      'face 'shadow)
-                                     title)
-                             row "Click to show Claude agent")
-                            (symbol-name kind)
-                            (or (alist-get 'status record) "")
-                            (format "%s %s" (symbol-name kind) id)))
+                    (herdr-overview--cells
+                     (herdr-overview--button
+                      (concat (propertize (concat prefix (if last "└─ " "├─ ")) 'face 'shadow)
+                              title)
+                      row "Click to show Claude agent")
+                     (symbol-name kind)
+                     (or (alist-get 'status record) "")
+                     (format "%s %s" (symbol-name kind) id)))
               rows)))
     (append (nreverse rows) subagents)))
 
@@ -1065,115 +1231,162 @@ Cache the query briefly to avoid repeated process inspection."
         (herdr-overview--subagent-rows
          children root ws session pane space prefix)))))
 
+(defun herdr-overview--project (ws)
+  "The project workspace WS belongs to: \"web\" for \"web@fix\"."
+  (car (split-string ws "@")))
+
+(defun herdr-overview--workspace-order ()
+  "Bound workspaces in the tab bar's order, else by name."
+  (let ((bound (hash-table-keys herdr--workspace-sessions)))
+    (if (fboundp 'workspace-names)
+        (append (seq-filter (lambda (w) (member w bound)) (workspace-names))
+                (seq-remove (lambda (w) (member w (workspace-names))) bound))
+      (sort bound #'string<))))
+
+(defun herdr-overview--child-label (ws root)
+  "How child workspace WS shows under its project: ⎇ branch for a worktree."
+  (let ((name (substring ws (1+ (string-search "@" ws)))))
+    (if (and root (file-regular-p (expand-file-name ".git" root)))
+        (concat "⎇ " name) name)))
+
+(defun herdr-overview--collapsed-p (key)
+  (and (hash-table-p herdr-overview--collapsed) (gethash key herdr-overview--collapsed)))
+
+(defun herdr-overview--plural (n word)
+  (format "%d %s%s" n word (if (= n 1) "" "s")))
+
+(defun herdr-overview--space-rows (children ws session space indent label)
+  "Rows for SPACE of workspace WS in SESSION: a header, then its panes.
+INDENT prefixes every row, LABEL names the header."
+  (let* ((space-id (alist-get 'workspace_id space))
+         (panes (alist-get 'panes (herdr--run session "pane" "list" "--workspace" space-id)))
+         (tabs (alist-get 'tabs (herdr--run session "tab" "list" "--workspace" space-id)))
+         (last-pane (car (last panes)))
+         (pane-ids (mapcar (lambda (pane) (alist-get 'pane_id pane)) panes))
+         (space-agents (seq-filter (lambda (agent) (member (alist-get 'pane_id agent) pane-ids))
+                                   (gethash session herdr--agents)))
+         (roots (delq nil (mapcar (lambda (agent) (herdr-overview--root session agent)) space-agents)))
+         (agent-count (length space-agents))
+         (shell-count (- (length panes) agent-count))
+         (subagent-count
+          (cl-loop for agent in space-agents
+                   for root = (herdr-overview--root session agent)
+                   sum (if root (length (herdr-overview--subagent-rows
+                                         children root ws session (alist-get 'pane_id agent) space-id ""))
+                         0)))
+         (task-count (cl-loop for root in roots sum (length (gethash root herdr--claude-tasks))))
+         (workflow-count (cl-loop for root in roots sum (length (gethash root herdr--claude-workflows))))
+         (context (cl-loop for root in roots
+                           sum (or (alist-get 'context_tokens (gethash root herdr--claude-stats)) 0)))
+         (last-ns (or (cl-loop for root in roots
+                               maximize (or (alist-get 'last_ns (gethash root herdr--claude-stats)) 0))
+                      0))
+         (dir (or (and (boundp 'workspace-roots) (gethash ws workspace-roots))
+                  (alist-get 'cwd (car panes))))
+         (collapsed (herdr-overview--collapsed-p (list ws session space-id)))
+         (row (list 'space ws session space-id))
+         rows)
+    (push (list row
+                (herdr-overview--cells
+                 (herdr-overview--button
+                  (concat indent (propertize (if collapsed "▸ " "▾ ") 'face 'shadow)
+                          (propertize label 'face 'font-lock-function-name-face))
+                  row (if collapsed "Click to expand space" "Click to fold space"))
+                 (propertize "space" 'face 'shadow)
+                 (herdr--agent-count-glyphs space-agents)
+                 (propertize
+                  (string-join
+                   (delq nil (list (herdr-overview--plural agent-count "agent")
+                                   (herdr-overview--plural shell-count "shell")
+                                   (and (> subagent-count 0) (herdr-overview--plural subagent-count "subagent"))
+                                   (and (> task-count 0) (herdr-overview--plural task-count "task"))
+                                   (and (> workflow-count 0) (herdr-overview--plural workflow-count "workflow"))))
+                   " · ")
+                  'face 'shadow)
+                 (list :context (if (> context 0) (propertize (format "%dk total" (round context 1000)) 'face 'shadow) "")
+                       :branch (or (and dir (herdr--git-branch dir)) "")
+                       :last (if (> last-ns 0) (herdr-overview--age last-ns) ""))))
+          rows)
+    (unless collapsed
+      (dolist (pane panes)
+        (let* ((pane-id (alist-get 'pane_id pane))
+               (agent (seq-find (lambda (a) (equal (alist-get 'pane_id a) pane-id))
+                                (gethash session herdr--agents)))
+               (status (and agent (alist-get 'agent_status agent)))
+               (title (or (alist-get 'terminal_title_stripped pane)
+                          (alist-get 'terminal_title_stripped agent) ""))
+               (command (unless agent (herdr--overview-process session pane-id)))
+               (tab (seq-find (lambda (item) (equal (alist-get 'tab_id item) (alist-get 'tab_id pane))) tabs))
+               (name (if agent (herdr--agent-label agent)
+                       (seq-find (lambda (c) (and (stringp c) (not (string-empty-p c))))
+                                 (list (alist-get 'label pane) (alist-get 'label tab) pane-id))))
+               (row (list (if agent 'agent 'terminal) ws session pane-id (alist-get 'tab_id pane) space-id)))
+          (push (list row
+                      (herdr-overview--cells
+                       (herdr-overview--button
+                        (concat indent (propertize (if (eq pane last-pane) "  └─ " "  ├─ ") 'face 'shadow) name)
+                        row (if agent "Click to show agent" "Click to show shell"))
+                       (if agent (or (alist-get 'agent agent) "agent") "shell")
+                       (if agent (concat (herdr--status-glyph status) " " (or status ""))
+                         (if command "running" "shell"))
+                       (if agent title (or command title))
+                       (when agent (herdr-overview--agent-stats session agent))))
+                rows)
+          (when agent
+            (dolist (subrow (herdr-overview--agent-rows
+                             children agent ws session space-id
+                             (concat indent (if (eq pane last-pane) "     " "  │  "))))
+              (push subrow rows))))))
+    (nreverse rows)))
+
 (defun herdr--overview-entries ()
-  (let ((children (herdr-overview--subagents)) rows)
-    (maphash
-     (lambda (ws session)
-       (when (and (or (eq herdr-overview--scope 'all) (equal ws herdr-overview--scope))
-                  (herdr--session-running-p session))
-         (dolist (space (alist-get 'workspaces (herdr--run session "workspace" "list")))
-           (let* ((space-id (alist-get 'workspace_id space))
-                  (label (or (alist-get 'label space) space-id))
-                  (display-label (if (equal label ws) label
-                                   (format "%s › %s" ws label)))
-                  (panes (alist-get 'panes (herdr--run session "pane" "list"
-                                                       "--workspace" space-id)))
-                  (tabs (alist-get 'tabs (herdr--run session "tab" "list"
-                                                     "--workspace" space-id)))
-                  (last-pane (car (last panes)))
-                  (pane-ids (mapcar (lambda (pane) (alist-get 'pane_id pane)) panes))
-                  (space-agents (seq-filter (lambda (agent)
-                                              (member (alist-get 'pane_id agent) pane-ids))
-                                            (gethash session herdr--agents)))
-                  (agent-count (length space-agents))
-                  (shell-count (- (length panes) agent-count))
-                  (subagent-count
-                   (cl-loop for agent in space-agents
-                            for pane-id = (alist-get 'pane_id agent)
-                            for root = (herdr-overview--root session agent)
-                            sum (if root
-                                    (length (herdr-overview--subagent-rows
-                                             children root ws session pane-id space-id ""))
-                                  0)))
-                  (task-count
-                   (cl-loop for agent in space-agents
-                            for root = (herdr-overview--root session agent)
-                            sum (length (gethash root herdr--claude-tasks))))
-                  (workflow-count
-                   (cl-loop for agent in space-agents
-                            for root = (herdr-overview--root session agent)
-                            sum (length (gethash root herdr--claude-workflows))))
-                  (collapsed (and (hash-table-p herdr-overview--collapsed)
-                                  (gethash (list ws session space-id)
-                                           herdr-overview--collapsed))))
-             (let ((row (list 'space ws session space-id)))
-               (push (list row
-                           (vector (herdr-overview--button
-                                    (concat (propertize (if collapsed "▸ " "▾ ") 'face 'shadow)
-                                            (propertize display-label 'face 'font-lock-function-name-face))
-                                    row (if collapsed "Click to expand space" "Click to fold space"))
-                                   (propertize "space" 'face 'shadow)
-                                   (herdr--agent-count-glyphs space-agents)
-                                   (propertize
-                                    (concat (format "%d agent%s · %d shell%s"
-                                            agent-count (if (= agent-count 1) "" "s")
-                                            shell-count (if (= shell-count 1) "" "s"))
-                                            (if (> subagent-count 0)
-                                                (format " · %d subagent%s" subagent-count
-                                                        (if (= subagent-count 1) "" "s"))
-                                              "")
-                                            (if (> task-count 0)
-                                                (format " · %d task%s" task-count
-                                                        (if (= task-count 1) "" "s"))
-                                              "")
-                                            (if (> workflow-count 0)
-                                                (format " · %d workflow%s" workflow-count
-                                                        (if (= workflow-count 1) "" "s"))
-                                              ""))
-                                    'face 'shadow)))
-                     rows))
-             (unless collapsed
-               (dolist (pane panes)
-                 (let* ((pane-id (alist-get 'pane_id pane))
-                        (agent (seq-find (lambda (a) (equal (alist-get 'pane_id a) pane-id))
-                                         (gethash session herdr--agents)))
-                        (status (and agent (alist-get 'agent_status agent)))
-                        (title (or (alist-get 'terminal_title_stripped pane)
-                                   (alist-get 'terminal_title_stripped agent)
-                                   ""))
-                        (command (unless agent (herdr--overview-process session pane-id)))
-                        (tab (seq-find (lambda (item)
-                                         (equal (alist-get 'tab_id item)
-                                                (alist-get 'tab_id pane)))
-                                       tabs))
-                        (name (if agent (herdr--agent-label agent)
-                                (seq-find (lambda (candidate)
-                                            (and (stringp candidate)
-                                                 (not (string-empty-p candidate))))
-                                          (list (alist-get 'label pane)
-                                                (alist-get 'label tab)
-                                                pane-id)))))
-                   (let ((row (list (if agent 'agent 'terminal) ws session pane-id
-                                    (alist-get 'tab_id pane) space-id)))
-                     (push (list row
-                                 (vector (herdr-overview--button
-                                          (concat (propertize (if (eq pane last-pane)
-                                                                  "  └─ " "  ├─ ") 'face 'shadow)
-                                                  name)
-                                          row (if agent "Click to show agent"
-                                                "Click to show shell"))
-                                         (if agent "agent" "shell")
-                                         (if agent
-                                             (concat (herdr--status-glyph status) " " (or status ""))
-                                           (if command "running" "shell"))
-                                         (if agent title (or command title))))
-                           rows)
-                     (when agent
-                       (dolist (subrow (herdr-overview--agent-rows
-                                        children agent ws session space-id
-                                        (if (eq pane last-pane) "     " "  │  ")))
-                           (push subrow rows)))))))))))
-     herdr--workspace-sessions)
+  "Overview rows, grouped by project in tab-bar order.
+A project with worktrees or sub-workspaces gets a header row, with its own
+spaces and each child's nested beneath it."
+  (let ((children (herdr-overview--subagents)) groups rows)
+    ;; (PROJECT . ((WS . SESSION) ...)), in order.
+    (dolist (ws (herdr-overview--workspace-order))
+      (let ((session (gethash ws herdr--workspace-sessions)))
+        (when (and (or (eq herdr-overview--scope 'all)
+                       (equal (herdr-overview--project ws) (herdr-overview--project herdr-overview--scope)))
+                   (herdr--session-running-p session))
+          (let* ((project (herdr-overview--project ws))
+                 (group (assoc project groups)))
+            (if group (setcdr group (append (cdr group) (list (cons ws session))))
+              (push (list project (cons ws session)) groups))))))
+    (dolist (group (nreverse groups))
+      (let* ((project (car group))
+             (members (cdr group))
+             (nested (seq-some (lambda (m) (string-search "@" (car m))) members))
+             (key (list 'project project))
+             (collapsed (and nested (herdr-overview--collapsed-p key))))
+        (when nested
+          (let ((agents (cl-loop for (_ . session) in members append (gethash session herdr--agents))))
+            (push (list (list 'project project nil project)
+                        (herdr-overview--cells
+                         (herdr-overview--button
+                          (concat (propertize (if collapsed "▸ " "▾ ") 'face 'shadow)
+                                  (propertize project 'face '(:inherit font-lock-keyword-face :weight bold)))
+                          (list 'project project nil project)
+                          (if collapsed "Click to expand project" "Click to fold project"))
+                         (propertize "project" 'face 'shadow)
+                         (herdr--agent-count-glyphs agents)
+                         (propertize (format "%s · %s"
+                                             (herdr-overview--plural (length members) "workspace")
+                                             (herdr-overview--plural (length agents) "agent"))
+                                     'face 'shadow)))
+                  rows)))
+        (unless collapsed
+          (pcase-dolist (`(,ws . ,session) members)
+            (let ((root (and (boundp 'workspace-roots) (gethash ws workspace-roots))))
+              (dolist (space (alist-get 'workspaces (herdr--run session "workspace" "list")))
+                (let* ((space-label (or (alist-get 'label space) (alist-get 'workspace_id space)))
+                       (label (cond ((not nested) (if (equal space-label ws) ws (format "%s › %s" ws space-label)))
+                                    ((equal ws project) "base")
+                                    (t (herdr-overview--child-label ws root)))))
+                  (dolist (r (herdr-overview--space-rows children ws session space
+                                                         (if nested "  " "") label))
+                    (push r rows)))))))))
     (nreverse rows)))
 
 ;;;###autoload
@@ -1221,7 +1434,8 @@ SCOPE is `all' (default) or a workspace name; see `herdr-overview-workspace'."
   (unless row
     (user-error "Select a Herdr space, agent, or terminal"))
   (pcase-let ((`(,kind ,ws ,session ,id . ,rest) row))
-    (when (and (fboundp 'persp-switch) (not (equal ws (herdr--workspace))))
+    (when (and (fboundp 'persp-switch) (not (equal ws (herdr--workspace)))
+               (or (not (eq kind 'project)) (member ws (persp-names))))
       (persp-switch ws))
     (pcase kind
       ('agent (herdr--show session id))
@@ -1232,7 +1446,8 @@ SCOPE is `all' (default) or a workspace name; see `herdr-overview-workspace'."
        (herdr--display session))
       ('space
        (herdr--run session "workspace" "focus" id)
-       (herdr--display session)))))
+       (herdr--display session))
+      ('project nil))))
 
 ;;;; Mode
 
