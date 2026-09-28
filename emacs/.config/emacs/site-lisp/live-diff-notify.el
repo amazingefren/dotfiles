@@ -1,7 +1,6 @@
 ;;; live-diff-notify.el --- Bounded filesystem follow without Git -*- lexical-binding: t -*-
 
-;; A directory watch discovers additions and atomic saves.  Individual file
-;; watches cover edits on backends whose directory watches report names only.
+;; Some backends' directory watches report names only, so files are watched too.
 
 (require 'cl-lib)
 (require 'filenotify)
@@ -200,8 +199,7 @@ Only paths inside the validated root are visited; symlinks are ignored."
          (let ((after (gethash path current)))
            (cond
             ((and (null after) (file-regular-p path))
-             ;; An unreadable, oversized, or excluded file is still present.
-             ;; Keep its last snapshot instead of claiming it was deleted.
+             ;; Unreadable, oversized or excluded files still exist; keep the old snapshot.
              (puthash path before current)
              (push path files)
              (setf (live-diff-notify--watcher-limited watcher) t))

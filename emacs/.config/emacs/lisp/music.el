@@ -6,40 +6,29 @@
              spot-add-current-track-to-playlist spot-player-play spot-player-pause
              spot-player-next spot-player-previous spot-authorize spot-mode)
   :config
-  ;; Spotify only allows plain http for the loopback IP; this is the URI
-  ;; registered on the developer app. Nothing listens there: after approving,
-  ;; the browser shows an error page whose address bar holds ?code=... to paste.
+  ;; Spotify allows plain http only on loopback. Nothing listens: paste the ?code= from the error page.
   (setq spot--redirect-uri (url-hexify-string "http://127.0.0.1:8080/smudge_api_callback"))
 
-  ;; Development-mode apps get at most 10 results per type; spot asks for 20
-  ;; and Spotify answers with nothing. Cap it unless the query sets its own.
+  ;; Development-mode apps get at most 10 results per type; spot asks for 20 and gets nothing.
   (define-advice spot--build-search-q-params (:filter-return (params) music-cap-limit)
     (if (string-match-p "limit=" params) params (concat params "&limit=10")))
-  ;; Search only what I actually look for. Spotify's matching for shows,
-  ;; episodes and audiobooks is loose enough to return "hospice care" for a
-  ;; song title, and they crowd the list. "-- --type=show" still asks for them.
+  ;; Spotify's matching for shows, episodes and audiobooks is loose enough to crowd the list.
   (define-advice spot--build-search-q-params (:filter-return (params) music-default-types)
     (replace-regexp-in-string "&type=album,artist,playlist,track,show,episode,audiobook"
                               "&type=track,album,artist,playlist" params t t))
 
-  ;; Spotify pads search results with null entries (half the playlists for some
-  ;; queries) and spot trips over them. Drop them, and hand dash a list.
+  ;; Spotify pads search results with null entries and spot trips over them.
   (define-advice spot--union-search-items (:filter-return (items) music-drop-nulls)
     (seq-remove #'null (append items nil)))
 
-  ;; Spotify now returns slimmed-down objects to development-mode apps (an
-  ;; artist without followers/genres/popularity), and spot's annotators index
-  ;; into the missing fields. A candidate with no annotation beats a broken
-  ;; picker: swallow annotator errors.
+  ;; Development-mode apps get slimmed-down objects, and spot's annotators error on the missing fields.
   (dolist (fn '(spot--annotate-album spot--annotate-artist spot--annotate-playlist spot--annotate-track
                 spot--annotate-show spot--annotate-episode spot--annotate-audiobook))
     (when (fboundp fn)
       (advice-add fn :around (lambda (orig &rest args) (condition-case nil (apply orig args) (error nil)))
                   '((name . music-safe-annotate)))))
 
-  ;; RET in the picker. spot binds nothing to it (everything is an embark action
-  ;; behind C-.), so RET just closed the picker. Make RET play tracks, albums
-  ;; and artists, and open playlists as a list of their tracks.
+  ;; spot binds nothing to RET in the picker (everything is an embark action).
   (dolist (src '(spot--consult-source-track spot--consult-source-album spot--consult-source-artist
                  spot--consult-source-playlists-tracks spot--consult-source-show spot--consult-source-episode
                  spot--consult-source-audiobook))
@@ -47,9 +36,7 @@
   (dolist (src '(spot--consult-source-playlist spot--consult-source-current-user-playlists))
     (when (boundp src) (set src (plist-put (symbol-value src) :action #'spot-action--list-playlist-tracks))))
 
-  ;; Playback needs a target device. Spotify only accepts a play command when
-  ;; some device is already active; otherwise it fails quietly. Remember a
-  ;; device (SPC o s d) and pass it along whenever nothing is active.
+  ;; Spotify quietly ignores a play command unless some device is active.
   (defvar music--device-id nil "Spotify device id playback goes to when none is active.")
   (with-eval-after-load 'savehist (add-to-list 'savehist-additional-variables 'music--device-id))
   (defun music--devices ()
@@ -72,26 +59,23 @@
         (cl-letf (((symbol-function 'spot--base-q-params) (lambda () (concat "?device_id=" music--device-id))))
           (funcall orig item)))))
 
-  ;; Client id/secret from 1Password, on first need.
   (defun music--load-credentials ()
     (unless spot-client-id
       (setq spot-client-id (op-secret 'spotify-client-id)
             spot-client-secret (op-secret 'spotify-client-secret))))
-  (advice-add 'spot--id-secret :before #'music--load-credentials)      ; token exchange / refresh
-  (advice-add 'spot--auth-url-full :before #'music--load-credentials)  ; the authorize URL
+  (advice-add 'spot--id-secret :before #'music--load-credentials)
+  (advice-add 'spot--auth-url-full :before #'music--load-credentials)
 
-  ;; spot forgets to ask for the playlist-read scopes (403 "insufficient client
-  ;; scope" on your own playlists) and the currently-playing one. Add them.
+  ;; spot omits these scopes (403 "insufficient client scope" on your own playlists).
   (define-advice spot--auth-url-full (:filter-return (url) music-extra-scopes)
     (replace-regexp-in-string "&scope=" "&scope=playlist-read-private%20playlist-read-collaborative%20user-read-currently-playing%20" url t t))
 
-  ;; Authorize in the real browser, where the password manager lives and the
-  ;; address bar is easy to copy from, rather than in the embedded WebKit.
+  ;; The real browser has the password manager and an easy-to-copy address bar.
   (define-advice spot-authorize (:around (orig) music-external-browser)
     (let ((browse-url-browser-function #'browse-url-default-macosx-browser))
       (funcall orig)))
 
-  ;; Refresh token persistence (spot itself keeps it only in memory).
+  ;; spot keeps the refresh token only in memory.
   (require 'plstore)
   (defvar music--token-store (no-littering-expand-var-file-name "spot.plstore"))
   (defun music--save-refresh-token (token)
@@ -113,14 +97,12 @@
                             (music--save-refresh-token new))))
   (unless spot-refresh-token (setq spot-refresh-token (music--load-refresh-token)))
 
-  ;; The mode-line poll fires every few seconds even while there is no token
-  ;; yet (mid-authorization) and then errors in the echo area. Keep quiet then.
+  ;; The mode-line poll runs before there is a token and errors in the echo area.
   (define-advice spot--check-for-modeline-update (:around (orig) music-quiet-without-token)
     (when (or spot-access-token spot-refresh-token)
       (condition-case err (funcall orig)
         (error (message "spot: %s" (error-message-string err))))))
 
-  ;; Current track in the mode line (doom-modeline shows global-mode-string).
   (add-to-list 'global-mode-string '(:eval (and (bound-and-true-p spot-mode) (spot-mode-line-string))) t))
 
 (defun music--ensure ()
@@ -134,7 +116,7 @@ Done on first use rather than at startup so Spotify only asks 1Password when you
 
 (music-defcommand music-search
   "Search Spotify. Results grouped tracks, albums, artists, playlists, in Spotify's relevance order."
-  (let ((vertico-sort-function nil))          ; keep Spotify's ranking and the group order below
+  (let ((vertico-sort-function nil))
     (consult--multi '(spot--consult-source-track spot--consult-source-album
                       spot--consult-source-artist spot--consult-source-playlist)
                     :history '(:input spot--consult-search-search-history)
@@ -148,8 +130,6 @@ Done on first use rather than at startup so Spotify only asks 1Password when you
 (music-defcommand music-authorize "Authorize Spotify."
   (security-ensure-plstore-key)
   (spot-authorize))
-
-;;; Keybindings
 
 (leader
   "os"  '(:ignore t :wk "spotify")

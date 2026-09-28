@@ -1,12 +1,5 @@
 ;;; laya-playground.el --- Editable experiments for LAYA -*- lexical-binding: t -*-
 
-;; Package-Requires: ((emacs "29.1"))
-
-;;; Commentary:
-;; A JSON workbench for the asynchronous `laya' API.  Experiments are data;
-;; opening or replaying one never evaluates Lisp or submits an API request.
-
-;;; Code:
 (require 'laya)
 (require 'js)
 (require 'json)
@@ -106,7 +99,6 @@ An ID pruned from the retained job table is treated as completed."
   "Record SNAPSHOT in originating BUFFER without changing keyboard focus."
   (when (buffer-live-p buffer)
     (with-current-buffer buffer
-      ;; A saved callback from an older run must not replace a newer result.
       (when (equal (gethash "id" snapshot) laya-playground--job)
         (setq laya-playground--snapshot snapshot)
         (setq header-line-format
@@ -208,8 +200,7 @@ An ID pruned from the retained job table is treated as completed."
     (puthash "format" "laya-experiment-v1" record)
     (puthash "request" request record)
     (when laya-playground--snapshot
-      ;; Store the completed request independently, since defaults may have
-      ;; been filled in and the editable input may now differ from that run.
+      ;; The run's request may differ from the input, e.g. with defaults filled in.
       (puthash "previous_run" laya-playground--snapshot record))
     (with-temp-buffer
       (insert (laya-playground--json record) "\n")

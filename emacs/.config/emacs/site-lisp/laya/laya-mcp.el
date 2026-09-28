@@ -1,10 +1,5 @@
 ;;; laya-mcp.el --- Scoped agent access to LAYA -*- lexical-binding: t -*-
 
-;;; Commentary:
-;; Called only by the fixed Emacs MCP dispatcher.  Owner identity is injected
-;; by the stdio bridge, never accepted from public tool parameters.
-
-;;; Code:
 (require 'laya)
 (require 'subr-x)
 

@@ -10,18 +10,13 @@
   :config
   (define-key ghostel-mode-map (kbd "C-h") #'evil-window-left)
   (define-key ghostel-mode-map (kbd "C-l") #'evil-window-right)
-  ;; A plain click opens links in xwidgets; C-/Cmd-click uses the macOS
-  ;; browser, for pages that need its logins.  The down events are bound so
-  ;; the global C-down-mouse-1 buffer menu doesn't pop up first.
+  ;; Bind the down events too, or the global C-down-mouse-1 buffer menu pops up first.
   (with-eval-after-load 'ghostel-links
     (dolist (mod '("C" "s"))
       (define-key ghostel-link-map (kbd (format "%s-<down-mouse-1>" mod)) #'ignore)
       (define-key ghostel-link-map (kbd (format "%s-<mouse-1>" mod)) #'terminal-open-link-externally))))
 
-;; ghostel redraws right away only for output that follows a keystroke;
-;; anything else waits for its ~30fps batching timer.  A wheel event
-;; forwarded to a TUI (Claude, or herdr's panes) is input too, so count it
-;; and let the repaint it causes show at once instead of every ~45ms.
+;; ghostel repaints at once only after input, else ~45ms later; count TUI wheel events as input.
 (defvar ghostel--last-send-time)
 (defun terminal--scroll-counts-as-input (orig event button)
   (let ((sent (funcall orig event button)))
@@ -132,8 +127,6 @@
         (terminal--show next)
       (when (window-live-p window)
         (delete-window window)))))
-
-;;; Keybindings
 
 (leader
   "t"  '(:ignore t :wk "terminal")

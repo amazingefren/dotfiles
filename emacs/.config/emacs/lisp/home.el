@@ -12,10 +12,7 @@
   (herdr-overview)
   (select-window (get-buffer-window "*elfeed-search*")))
 
-;; Lay out home after startup, unless Emacs was opened on a file.
 (add-hook 'emacs-startup-hook
           (lambda () (unless (cl-some #'buffer-file-name (buffer-list)) (home-open))))
-
-;;; Keybindings
 
 (leader "TAB h" '(home-open :wk "home layout"))

@@ -17,7 +17,6 @@
   :hook (csv-mode . csv-align-mode)
   )
 
-;; Give each project its mise-managed toolchain environment.
 (use-package mise
   :hook (after-init . global-mise-mode))
 
@@ -84,7 +83,6 @@
     "]d" #'flymake-goto-next-error
     "[d" #'flymake-goto-prev-error))
 
-;; Keep type information out of the echo area; K opens it at point.
 (defun lang-hide-eldoc-echo-area ()
   "Hide automatic Eldoc messages in managed buffers."
   (setq-local eldoc-display-functions
@@ -98,7 +96,6 @@
   (eldoc-box-max-pixel-width 700)
   (eldoc-box-max-pixel-height 420))
 
-;; SPC l f uses the language server; SPC f b uses Apheleia and Prettier for TS.
 (use-package apheleia
   :commands (apheleia-format-buffer apheleia-mode)
   :config
@@ -110,8 +107,6 @@
   (interactive)
   (apheleia-mode 'toggle)
   (message "Format on save %s" (if apheleia-mode "on" "off")))
-
-;;; Keybindings
 
 (leader
   "l"  '(:ignore t :wk "lsp")

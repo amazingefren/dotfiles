@@ -1,34 +1,5 @@
 ;;; herdr.el --- AI coding agents in herdr sessions, one per workspace  -*- lexical-binding: t -*-
 
-;; Author: Efren
-;; Version: 0.1
-;; Package-Requires: ((emacs "30.1") (ghostel "0.1") (perspective "2.0"))
-;; Keywords: tools, terminals
-
-;;; Commentary:
-
-;; herdr (https://herdr.dev) is a persistent terminal server that runs AI
-;; coding CLIs and detects what each one is doing: idle, working, blocked
-;; (waiting on you), or done.  This package puts that inside Emacs:
-;;
-;; - Each Emacs workspace (perspective) is bound to one herdr session, named
-;;   after that workspace by default.  Sessions outlive Emacs: restart, and
-;;   `herdr-switch' reattaches.  `herdr-bind-session' can override the default.
-;; - Each Emacs workspace has one Herdr space, with one tab per new agent.
-;;   Agents run in herdr panes.  Emacs shows the session in a side window
-;;   through a ghostel terminal running the full herdr client, so herdr's
-;;   own tabs and shells work there too; agent commands focus that client
-;;   on the agent.
-;; - Agent states are polled and shown as glyphs in the Emacs workspace bar
-;;   and Herdr's agent tab labels, and in `herdr-overview', which groups
-;;   agents, shells, tasks, workflows, and subagents beneath their spaces.
-;;
-;; Commands: `herdr-start', `herdr-switch', `herdr-toggle', `herdr-prompt', `herdr-rename',
-;; `herdr-send-region', `herdr-overview', `herdr-kill', `herdr-bind-session', `herdr-clean'.
-;; Turn on `herdr-mode' for the polling and tab-bar integration.
-
-;;; Code:
-
 (require 'cl-lib)
 (require 'seq)
 (require 'subr-x)
@@ -45,9 +16,7 @@
 (defvar workspace-roots)
 (declare-function emacs-mcp-activity-refresh "mcp")
 (defvar workspace-status-function)
-;; Declared here so the dynamic binding in `herdr-start' remains dynamic even
-;; with lexical binding.  `agents.el' owns the value and consumes it only
-;; while constructing its per-launch arguments.
+;; Declared so the binding in `herdr-start' stays dynamic; `agents.el' owns it.
 (defvar agents--mcp-launch-context)
 
 (defgroup herdr nil
@@ -97,8 +66,6 @@ When nil, ask on first use and save the choice in `custom-file'."
 (defface herdr-working '((t :inherit success)) "Glyph for a working agent.")
 (defface herdr-attention '((t :inherit warning :weight bold)) "Glyph for an agent that needs you.")
 
-;;;; State
-
 (defvar herdr--workspace-sessions (make-hash-table :test #'equal)
   "Workspace (perspective) name -> herdr session name.")
 
@@ -107,6 +74,9 @@ When nil, ask on first use and save the choice in `custom-file'."
 
 (defvar herdr--tab-status-last-sync (make-hash-table :test #'equal)
   "Session name -> time its Herdr tab labels were last checked.")
+
+(defvar herdr--poll-started nil
+  "When the `herdr--poll-async' still waiting on herdr began, or nil.")
 
 (defvar herdr--codex-threads (make-hash-table :test #'equal)
   "Herdr (SESSION . PANE) -> root Codex thread ID, reported by Emacs MCP.")
@@ -134,8 +104,6 @@ started_ns, last_ns (see bin/claude_subagents.py).")
 
 (defvar-local herdr--client-session nil
   "The herdr session this buffer's client is attached to.")
-
-;;;; herdr CLI
 
 (defun herdr--session-args (session args)
   (append (when session (list "--session" session)) args))
@@ -190,18 +158,36 @@ Call ON-SUCCESS with the parsed result, or ON-ERROR with the error data."
 
 (define-error 'herdr-error "herdr")
 
+(defun herdr--parse-sessions ()
+  "Alist of (name . running-p) from `herdr session list' output in this buffer."
+  (goto-char (point-min)) (forward-line 1)
+  (let (out)
+    (while (not (eobp))
+      (let ((cols (split-string (buffer-substring (line-beginning-position) (line-end-position)) "[ \t]+" t)))
+        (when (>= (length cols) 2)
+          (push (cons (car cols) (string= (cadr cols) "running")) out)))
+      (forward-line 1))
+    (nreverse out)))
+
 (defun herdr--sessions ()
   "Alist of (name . running-p) for known herdr sessions."
   (with-temp-buffer
     (call-process herdr-program nil t nil "session" "list")
-    (goto-char (point-min)) (forward-line 1)   ; header
-    (let (out)
-      (while (not (eobp))
-        (let ((cols (split-string (buffer-substring (line-beginning-position) (line-end-position)) "[ \t]+" t)))
-          (when (>= (length cols) 2)
-            (push (cons (car cols) (string= (cadr cols) "running")) out)))
-        (forward-line 1))
-      (nreverse out))))
+    (herdr--parse-sessions)))
+
+(defun herdr--sessions-async (callback)
+  "Call CALLBACK with `herdr--sessions' without blocking Emacs."
+  (let ((buffer (generate-new-buffer " *herdr-sessions*")))
+    (make-process
+     :name "herdr-sessions" :buffer buffer :noquery t
+     :command (list herdr-program "session" "list")
+     :connection-type 'pipe
+     :sentinel
+     (lambda (process _event)
+       (unless (process-live-p process)
+         (let ((sessions (with-current-buffer buffer (herdr--parse-sessions))))
+           (kill-buffer buffer)
+           (funcall callback sessions)))))))
 
 (defun herdr--session-running-p (session)
   (alist-get session (herdr--sessions) nil nil #'equal))
@@ -221,8 +207,6 @@ Call ON-SUCCESS with the parsed result, or ON-ERROR with the error data."
     (unless (herdr--session-running-p session)
       (user-error "herdr session %s did not start" session)))
   session)
-
-;;;; Sessions <-> workspaces
 
 (defun herdr--workspace ()
   (if (fboundp 'persp-current-name) (persp-current-name) "main"))
@@ -326,8 +310,6 @@ A stopped or deleted session is started again."
     (puthash workspace session herdr--workspace-sessions)
     session))
 
-;;;; Agents
-
 (defun herdr--agents (session)
   "Live agent list for SESSION from herdr."
   (alist-get 'agents (herdr--run session "agent" "list")))
@@ -379,18 +361,20 @@ Agents resumed or started from inside herdr can be unnamed."
    ((seq-some (lambda (a) (equal (alist-get 'agent_status a) "idle")) agents) "○")
    (agents "·")))
 
-(defun herdr--sync-tab-status (session agents)
-  "Show AGENTS' states in SESSION's Herdr tab labels.
-Preserve user-edited tab names and only send a rename when a label changes."
+(defun herdr--tab-renames (agents panes tabs)
+  "Renames, as (TAB-ID . LABEL), that show AGENTS' states in TABS.
+PANES says which tab each agent's pane is in.  User-edited tab names
+are kept, and a tab whose label is already right gets no rename."
   (let ((agent-by-pane (make-hash-table :test #'equal))
-        (agents-by-tab (make-hash-table :test #'equal)))
+        (agents-by-tab (make-hash-table :test #'equal))
+        renames)
     (dolist (agent agents)
       (puthash (alist-get 'pane_id agent) agent agent-by-pane))
-    (dolist (pane (alist-get 'panes (herdr--run session "pane" "list")))
+    (dolist (pane panes)
       (when-let* ((tab-id (alist-get 'tab_id pane))
                   (agent (gethash (alist-get 'pane_id pane) agent-by-pane)))
         (push agent (gethash tab-id agents-by-tab))))
-    (dolist (tab (alist-get 'tabs (herdr--run session "tab" "list")))
+    (dolist (tab tabs)
       (let* ((tab-id (alist-get 'tab_id tab))
              (label (alist-get 'label tab))
              (symbol (herdr--tab-status-symbol (gethash tab-id agents-by-tab))))
@@ -398,7 +382,33 @@ Preserve user-edited tab names and only send a rename when a label changes."
           (let* ((base (herdr--tab-base-label label))
                  (desired (if symbol (concat symbol " " base) base)))
             (unless (equal label desired)
-              (herdr--run session "tab" "rename" tab-id desired))))))))
+              (push (cons tab-id desired) renames))))))
+    (nreverse renames)))
+
+(defun herdr--sync-tab-status (session agents)
+  "Show AGENTS' states in SESSION's Herdr tab labels.
+Preserve user-edited tab names and only send a rename when a label changes."
+  (pcase-dolist (`(,tab-id . ,label)
+                 (herdr--tab-renames agents
+                                     (alist-get 'panes (herdr--run session "pane" "list"))
+                                     (alist-get 'tabs (herdr--run session "tab" "list"))))
+    (herdr--run session "tab" "rename" tab-id label)))
+
+(defun herdr--sync-tab-status-async (session agents on-success)
+  "Like `herdr--sync-tab-status', without blocking Emacs.
+Call ON-SUCCESS once the labels are checked and renames are sent."
+  (herdr--run-async
+   session '("pane" "list")
+   (lambda (panes)
+     (herdr--run-async
+      session '("tab" "list")
+      (lambda (tabs)
+        (pcase-dolist (`(,tab-id . ,label)
+                       (herdr--tab-renames agents (alist-get 'panes panes) (alist-get 'tabs tabs)))
+          (herdr--run-async session (list "tab" "rename" tab-id label) #'ignore #'ignore))
+        (funcall on-success))
+      #'ignore))
+   #'ignore))
 
 (defun herdr--read-agent (session prompt)
   "Pick one of SESSION's agents, showing its state; return its pane id."
@@ -491,10 +501,6 @@ KIND is `herdr-default-kind' unless given a prefix argument."
                                          (herdr--run session "tab" "create"
                                                      "--workspace" (car space)
                                                      "--cwd" root "--label" name "--focus"))))))
-    ;; A frontend can use this dynamic launch context to configure a local
-    ;; companion process (for example, an editor MCP bridge) without Herdr
-    ;; taking a dependency on that frontend.  The actual agent still owns the
-    ;; shell process and inherits HERDR_PANE_ID from Herdr.
     (let ((agents--mcp-launch-context
            (list :root root :name name :session session :pane pane)))
       (when (fboundp 'agents--launch-shell-setup)
@@ -508,7 +514,6 @@ KIND is `herdr-default-kind' unless given a prefix argument."
                    (cons "--" arguments))))
        1))
     (message "Starting %s as %s in %s…" kind name (abbreviate-file-name root))
-    ;; The new tab is focused, so the client shows the agent booting.
     (herdr--display session)))
 
 (defun herdr--start-agent (session pane name args attempt)
@@ -548,9 +553,7 @@ to the pane, and gives the side window herdr's own tabs, shells, and agents."
       (let ((buffer (get-buffer-create bname))
             (process-environment (herdr--environment)))
         (save-window-excursion
-          ;; Ghostel's native PTY can omit dynamically bound environment
-          ;; variables.  Pass the config path in argv so the client always
-          ;; reads the same key bindings as the session server.
+          ;; Ghostel's native PTY can drop dynamically bound env vars; pass the config in argv.
           (if herdr-config-file
               (ghostel-exec buffer "/usr/bin/env"
                             (list (concat "HERDR_CONFIG_PATH="
@@ -561,8 +564,6 @@ to the pane, and gives the side window herdr's own tabs, shells, and agents."
           (setq herdr--client-session session)
           (herdr-client-mode 1))
         (cons buffer t)))))
-
-;;;; Moving between herdr panes and Emacs windows
 
 (defun herdr--focused-pane (session)
   (alist-get 'pane_id (seq-find (lambda (p) (eq (alist-get 'focused p) t))
@@ -632,8 +633,7 @@ Return non-nil if the client was just started."
   "Show SESSION's herdr client with the agent in PANE focused."
   (let ((fresh (herdr--display session)))
     (herdr--run session "agent" "focus" pane)
-    ;; A client that is still connecting misses the first focus; repeat it
-    ;; once the handshake has had time to finish.
+    ;; A client that is still connecting misses the first focus; repeat it after the handshake.
     (when fresh
       (run-at-time 1 nil (lambda () (ignore-errors (herdr--run session "agent" "focus" pane)))))))
 
@@ -725,8 +725,6 @@ Rename the tab too when it still has the agent's old name."
     (when (yes-or-no-p (format "Kill agent %s in %s? " (herdr--agent-label (herdr--agent session pane)) session))
       (herdr--kill session pane))))
 
-;;;; Cleanup
-
 (defun herdr--idle-pane-p (session pane)
   "Non-nil when PANE runs no agent and its shell is at a prompt.
 The shell owns the foreground process group only while nothing runs in it."
@@ -789,48 +787,87 @@ a space is idle when every pane in it is a shell at its prompt, with no agent."
               (message "Deleted %d session(s), closed %d space(s)" (length stopped) (length idle)))
           (when (window-live-p window) (quit-window t window)))))))
 
-;;;; Polling and tab-bar glyphs
+(defun herdr--poll-sessions ()
+  "The distinct sessions behind Emacs workspaces."
+  (let (seen)
+    (maphash (lambda (_ws session) (unless (member session seen) (push session seen)))
+             herdr--workspace-sessions)
+    (nreverse seen)))
+
+(defun herdr--poll-apply (session new &optional async)
+  "Record NEW as SESSION's agents; notify on new attention.
+Refresh Herdr's tab labels too, without blocking Emacs when ASYNC."
+  (let ((old (gethash session herdr--agents)))
+    (when herdr-notify
+      (dolist (a new)
+        (let* ((pane (alist-get 'pane_id a))
+               (was (alist-get 'agent_status (seq-find (lambda (o) (equal (alist-get 'pane_id o) pane)) old)))
+               (now (alist-get 'agent_status a)))
+          (when (and (equal was "working") (member now '("blocked" "done")))
+            (herdr--notify (format "%s %s" (herdr--agent-label a) now) (or (alist-get 'terminal_title_stripped a) ""))))))
+    (puthash session new herdr--agents)
+    ;; Tab listings are costly; also resync periodically for renames made in the Herdr client.
+    (let ((last (gethash session herdr--tab-status-last-sync))
+          (now (float-time)))
+      (when (or (not last)
+                (>= (- now last) 10)
+                (not (equal
+                      (mapcar (lambda (a) (cons (alist-get 'pane_id a)
+                                                (alist-get 'agent_status a))) old)
+                      (mapcar (lambda (a) (cons (alist-get 'pane_id a)
+                                                (alist-get 'agent_status a))) new))))
+        (if async
+            (herdr--sync-tab-status-async
+             session new (lambda () (puthash session now herdr--tab-status-last-sync)))
+          (when (ignore-errors (herdr--sync-tab-status session new) t)
+            (puthash session now herdr--tab-status-last-sync)))))))
 
 (defun herdr--poll ()
   "Refresh agent states and tab labels; notify on new attention."
-  (let (seen)
-    (maphash
-     (lambda (_ws session)
-       (unless (member session seen)
-         (push session seen)
-         (when (herdr--session-running-p session)
-           (let* ((old (gethash session herdr--agents))
-                  (fetched (condition-case nil
-                               (cons t (herdr--agents session))
-                             (error nil))))
-             (when fetched
-               (let ((new (cdr fetched)))
-                 (when herdr-notify
-                   (dolist (a new)
-                     (let* ((pane (alist-get 'pane_id a))
-                            (was (alist-get 'agent_status (seq-find (lambda (o) (equal (alist-get 'pane_id o) pane)) old)))
-                            (now (alist-get 'agent_status a)))
-                       (when (and (equal was "working") (member now '("blocked" "done")))
-                         (herdr--notify (format "%s %s" (herdr--agent-label a) now) (or (alist-get 'terminal_title_stripped a) ""))))))
-                 (puthash session new herdr--agents)
-                 ;; Pane and tab listings are costlier than agent polling.
-                 ;; Check immediately on status changes, and periodically for
-                 ;; manual tab renames or moves made inside the Herdr client.
-                 (let ((last (gethash session herdr--tab-status-last-sync))
-                       (now (float-time)))
-                   (when (or (not last)
-                             (>= (- now last) 10)
-                             (not (equal
-                                   (mapcar (lambda (a) (cons (alist-get 'pane_id a)
-                                                             (alist-get 'agent_status a))) old)
-                                   (mapcar (lambda (a) (cons (alist-get 'pane_id a)
-                                                             (alist-get 'agent_status a))) new))))
-                     (when (ignore-errors (herdr--sync-tab-status session new) t)
-                       (puthash session now herdr--tab-status-last-sync))))))))))
-     herdr--workspace-sessions))
+  (when-let* ((sessions (herdr--poll-sessions)))
+    (let ((running (herdr--sessions)))
+      (dolist (session sessions)
+        (when (alist-get session running nil nil #'equal)
+          (when-let* ((fetched (condition-case nil
+                                   (cons t (herdr--agents session))
+                                 (error nil))))
+            (herdr--poll-apply session (cdr fetched)))))))
+  (herdr--poll-refresh))
+
+(defun herdr--poll-async ()
+  "Like `herdr--poll', without blocking Emacs.  The poll timer runs this.
+A tick is skipped while the last one still waits on herdr, unless that
+has taken over 30 seconds."
+  (unless (and herdr--poll-started (< (- (float-time) herdr--poll-started) 30))
+    (if-let* ((sessions (herdr--poll-sessions)))
+        (progn
+          (setq herdr--poll-started (float-time))
+          (condition-case err
+              (herdr--sessions-async
+               (lambda (running)
+                 (let* ((live (seq-filter (lambda (s) (alist-get s running nil nil #'equal)) sessions))
+                        (pending (length live))
+                        (finish (lambda ()
+                                  (when (<= (setq pending (1- pending)) 0)
+                                    (setq herdr--poll-started nil)
+                                    (herdr--poll-refresh)))))
+                   (if (null live)
+                       (progn (setq herdr--poll-started nil) (herdr--poll-refresh))
+                     (dolist (session live)
+                       (herdr--run-async
+                        session '("agent" "list")
+                        (lambda (result)
+                          (unwind-protect (herdr--poll-apply session (alist-get 'agents result) t)
+                            (funcall finish)))
+                        (lambda (_err) (funcall finish))))))))
+            (error (setq herdr--poll-started nil)
+                   (signal (car err) (cdr err)))))
+      (herdr--poll-refresh))))
+
+(defun herdr--poll-refresh ()
+  "Redraw everything that shows the last poll's agent states."
   (force-mode-line-update t)
-  ;; Refresh open overviews less often than agent state: listing every pane and
-  ;; its foreground process is more expensive than polling agent statuses.
+  ;; Listing every pane and its foreground process costs more than polling agents.
   (dolist (buffer (buffer-list))
     (when (and (eq (buffer-local-value 'major-mode buffer) 'herdr-overview-mode)
                (get-buffer-window buffer t)
@@ -843,8 +880,6 @@ a space is idle when every pane in it is a shell at its prompt, with no agent."
           (tabulated-list-print t)
           (when id (goto-char (point-min))
                 (while (and (not (eobp)) (not (equal (tabulated-list-get-id) id))) (forward-line 1))))))))
-  ;; The optional Emacs MCP dashboard derives each row's state from this poll.
-  ;; Keep it fresh without making Herdr depend on the bridge.
   (when (fboundp 'emacs-mcp-activity-refresh)
     (dolist (buffer (buffer-list))
       (when (eq (buffer-local-value 'major-mode buffer) 'emacs-mcp-activity-mode)
@@ -852,8 +887,7 @@ a space is idle when every pane in it is a shell at its prompt, with no agent."
 
 (defun herdr--notify (title body)
   (message "[herdr] %s: %s" title body)
-  ;; Use a separate User Notifications helper instead of AppleScript. The
-  ;; latter makes macOS ask Emacs for cross-application AppleEvents access.
+  ;; Not AppleScript: that makes macOS prompt Emacs for AppleEvents access.
   (when-let* ((notifier (executable-find "terminal-notifier"))
               (process
                (start-process
@@ -883,8 +917,6 @@ WORKSPACE may be a list of workspaces, whose agents are counted together."
    (cl-loop for ws in (ensure-list workspace)
             for session = (gethash ws herdr--workspace-sessions)
             when session append (gethash session herdr--agents))))
-
-;;;; Overview
 
 (defvar herdr--overview-process-cache (make-hash-table :test #'equal)
   "Recent foreground command summaries, keyed by (SESSION . PANE).")
@@ -1076,7 +1108,7 @@ Cache the query briefly to avoid repeated process inspection."
   "Spaces, agents, shells, and Claude work in Herdr sessions."
   (setq tabulated-list-format herdr-overview--columns)
   (setq herdr-overview--collapsed (make-hash-table :test #'equal))
-  (setq mode-line-format nil)   ; the column header already says what this is; save the row
+  (setq mode-line-format nil)
   (tabulated-list-init-header))
 
 (defvar-local herdr-overview--scope 'all
@@ -1344,7 +1376,6 @@ INDENT prefixes every row, LABEL names the header."
 A project with worktrees or sub-workspaces gets a header row, with its own
 spaces and each child's nested beneath it."
   (let ((children (herdr-overview--subagents)) groups rows)
-    ;; (PROJECT . ((WS . SESSION) ...)), in order.
     (dolist (ws (herdr-overview--workspace-order))
       (let ((session (gethash ws herdr--workspace-sessions)))
         (when (and (or (eq herdr-overview--scope 'all)
@@ -1395,8 +1426,6 @@ spaces and each child's nested beneath it."
 SCOPE is `all' (default) or a workspace name; see `herdr-overview-workspace'."
   (interactive)
   (herdr--poll)
-  ;; One buffer per scope, so a workspace's table stays that workspace's table
-  ;; and the all-workspaces one (home) is separate.
   (let* ((scope (or scope 'all))
          (buffer (get-buffer-create (if (eq scope 'all) "*herdr overview*" (format "*herdr overview: %s*" scope)))))
     (with-current-buffer buffer
@@ -1405,7 +1434,6 @@ SCOPE is `all' (default) or a workspace name; see `herdr-overview-workspace'."
         (herdr-overview-mode))
       (setq herdr-overview--scope scope)
       (herdr-overview-refresh))
-    ;; Keep the dashboard below code while the terminal client stays on the right.
     (select-window
      (display-buffer buffer
                      '((display-buffer-reuse-window display-buffer-at-bottom)
@@ -1449,8 +1477,6 @@ SCOPE is `all' (default) or a workspace name; see `herdr-overview-workspace'."
        (herdr--display session))
       ('project nil))))
 
-;;;; Mode
-
 ;;;###autoload
 (define-minor-mode herdr-mode
   "Poll Herdr agent states and show them in Emacs and Herdr tab bars."
@@ -1458,7 +1484,7 @@ SCOPE is `all' (default) or a workspace name; see `herdr-overview-workspace'."
   (when herdr--poll-timer (cancel-timer herdr--poll-timer) (setq herdr--poll-timer nil))
   (if herdr-mode
       (progn
-        (setq herdr--poll-timer (run-with-timer 1 herdr-poll-interval #'herdr--poll))
+        (setq herdr--poll-timer (run-with-timer 1 herdr-poll-interval #'herdr--poll-async))
         (when (boundp 'workspace-status-function)
           (setq workspace-status-function #'herdr-workspace-glyph)))
     (when (boundp 'workspace-status-function)

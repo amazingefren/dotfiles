@@ -1,8 +1,5 @@
 ;;; ai-review.el --- Safe review surfaces for AI coding agents -*- lexical-binding: t -*-
 
-;; This module deliberately exposes inspection and presentation only.  Its Git
-;; calls use a fixed argument list and it never starts a compile/test command.
-
 (require 'cl-lib)
 (require 'compile)
 (require 'diff-mode)
@@ -91,8 +88,6 @@ subcommands and options."
   (if (ai-review--git-has-head-p root)
       (ai-review--git-output root "--no-pager" "diff" "--no-ext-diff" "--binary"
                              "--no-color" "HEAD" "--")
-    ;; A repository before its first commit has no HEAD.  Combine the two
-    ;; fixed views so both index and working-tree changes remain reviewable.
     (concat (ai-review--git-output root "--no-pager" "diff" "--no-ext-diff" "--binary"
                                    "--no-color" "--")
             (ai-review--git-output root "--no-pager" "diff" "--cached" "--no-ext-diff"
@@ -105,8 +100,6 @@ subcommands and options."
                 "\n" t)))
     (vconcat
      (mapcar (lambda (line)
-               ;; Porcelain v1 reserves the first three bytes for state and
-               ;; separator.  Preserve the remaining path verbatim.
                `((state . ,(substring line 0 (min 2 (length line))))
                  (path . ,(if (> (length line) 3) (substring line 3) ""))))
              lines))))

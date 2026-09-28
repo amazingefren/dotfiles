@@ -1,17 +1,5 @@
 ;;; laya-review.el --- Score diff hunks with LAYA -*- lexical-binding: t -*-
 
-;; Package-Requires: ((emacs "29.1"))
-
-;;; Commentary:
-;; A review shell over `laya-submit'.  A diff is split into hunks, each hunk
-;; is asked the questions in a JSON rubric, and the rubric's risk weights turn
-;; the answers into a 0-1 risk.  The rubric also names the backend and model,
-;; so better models and better questions need no code change.
-;;
-;; `laya-review-submit-hunk' is the reusable core; the review buffer is one
-;; client of it.
-
-;;; Code:
 (require 'laya)
 (require 'cl-lib)
 (require 'color)
@@ -62,8 +50,6 @@ The rubric's backends.<backend>.chunk_lines overrides it."
 (declare-function treesit-node-start "treesit.c" (node))
 (declare-function treesit-node-end "treesit.c" (node))
 (defvar treesit-defun-type-regexp)
-
-;;;; Diff parsing
 
 (defun laya-review--path (text)
   "Return the repository path in a ---/+++ header TEXT, or nil for /dev/null."
@@ -126,8 +112,6 @@ line numbers the row sits at on each side."
     (dolist (hunk hunks)
       (unless (plist-get hunk :line) (plist-put hunk :line 1)))
     (nreverse hunks)))
-
-;;;; Review units
 
 (defcustom laya-review-max-file-characters 400000
   "Largest file, in characters, parsed for function boundaries."
@@ -239,14 +223,12 @@ Returns (NAME . ROWS) pairs; small neighbouring units share a segment."
   (let* ((count (1- (length marks)))
          (unit-of (lambda (row) (and marks (aref marks (min count (max 1 (nth 3 row)))))))
          runs merged)
-    ;; Runs of rows in the same unit.
     (dolist (row rows)
       (let ((unit (funcall unit-of row)))
         (if (and runs (eq (caar runs) unit))
             (push row (cdar runs))
           (push (list unit row) runs))))
     (setq runs (mapcar (lambda (run) (cons (car run) (reverse (cdr run)))) (nreverse runs)))
-    ;; Merge neighbours that fit together; cut units that do not fit alone.
     (let (names current)
       (cl-flet ((emit ()
                   (when current
@@ -355,8 +337,6 @@ A revision, \":\" for the index, or nil for the worktree."
               (when (file-regular-p path)
                 (with-temp-buffer (insert-file-contents path) (buffer-string))))))))))
 
-;;;; Rubric and scoring
-
 (defun laya-review-load-rubric (&optional file)
   "Read and check the rubric in FILE, defaulting to `laya-review-rubric-file'."
   (let* ((file (or file laya-review-rubric-file))
@@ -447,8 +427,7 @@ lines, a SQL question needs SQL text.  The model is only asked what is left."
       (let ((buffer-file-name (expand-file-name file "/laya-review/"))
             (enable-local-variables nil))
         (ignore-errors (delay-mode-hooks (set-auto-mode))))
-      ;; A tree-sitter mode without its grammar falls back to a mode with no
-      ;; comment syntax; a built-in mode with the same comments will do.
+      ;; A tree-sitter mode without its grammar has no comment syntax.
       (unless comment-start-skip
         (when-let* ((fallback (cdr (seq-find (lambda (entry) (member (downcase extension) (car entry)))
                                              laya-review--comment-modes))))
@@ -582,8 +561,7 @@ P(level) x weight.  The hunk's risk is its largest contribution."
            (let ((contribution 0.0) (detail nil))
              (pcase (gethash "type" answer)
                ("choice"
-                ;; Name the option that adds the most risk, not the most
-                ;; likely one, which may be harmless.
+                ;; The most likely option may be harmless; name the riskiest.
                 (let ((probabilities (gethash "probabilities" answer))
                       (worst nil) (worst-part -1))
                   (maphash (lambda (label weight)
@@ -644,8 +622,7 @@ such as live edit followers."
          (merged (make-hash-table :test #'equal))
          jobs failure last)
     (if (null requests)
-        ;; Nothing to ask: settle on a later tick, as a real job would, so
-        ;; callers that pump from their callback do not recurse.
+        ;; Settle on a later tick so callers pumping from the callback do not recurse.
         (progn (run-at-time 0 nil callback
                             (list :status "succeeded" :risk 0.0 :reason laya-review--unasked-reason
                                   :answers merged :jobs nil :snapshot (make-hash-table :test #'equal)))
@@ -684,8 +661,6 @@ such as live edit followers."
               requests)))
         (if (cdr ids) ids (car ids))))))
 
-;;;; Evaluation
-
 (defcustom laya-review-cases-file
   (expand-file-name "tests/review-cases.json"
                     (file-name-directory (or load-file-name buffer-file-name)))
@@ -723,7 +698,6 @@ expects every question it is asked to answer false."
         (if (not (equal (plist-get outcome :status) "succeeded"))
             (push (gethash "name" case) failed)
           (pcase-dolist (`(,question ,want ,p) (laya-review--case-labels case outcome))
-            ;; caught bad, false alarms, bad, fine, gate misses, P sum bad, n, P sum fine, n
             (let ((row (or (gethash question table) (puthash question (make-vector 9 0) table)))
                   (said (and p (>= p 0.5))))
               (cl-incf (aref row (if want 2 3)))
@@ -800,8 +774,6 @@ CALLBACK, when given, receives the report text instead of a buffer."
                                             (list :status "failed" :error (error-message-string err)))))))))
       (message "LAYA review eval: scoring %d cases" (length cases))
       (pump))))
-
-;;;; Rubric lint
 
 (defcustom laya-review-lint-file
   (expand-file-name "rubric-lint.json"
@@ -914,8 +886,6 @@ given, receives the report text instead of a buffer."
       (message "LAYA rubric lint: %d questions" (length targets))
       (pump))))
 
-;;;; Diff sources
-
 (defun laya-review--git (root &rest arguments)
   "Return Git's output for ARGUMENTS in ROOT, or signal its error."
   (let ((default-directory root))
@@ -974,8 +944,7 @@ With UNTRACKED, append untracked files as new-file diffs."
       ('worktree (list :root root :label "uncommitted changes vs HEAD" :arguments '("HEAD" "--")
                        :untracked t))
       ('staged (list :root root :label "staged changes" :arguments '("--cached" "--")))
-      ;; The merge base against the working tree: commits on this branch plus
-      ;; work not yet committed, which main...HEAD alone would miss.
+      ;; main...HEAD alone would miss uncommitted work.
       ('branch (let* ((main (laya-review--main-branch root))
                       (base (string-trim (laya-review--git root "merge-base" main "HEAD"))))
                  (list :root root :label (format "this branch + uncommitted vs %s" main)
@@ -1001,8 +970,6 @@ With UNTRACKED, append untracked files as new-file diffs."
     (list :root (condition-case nil (laya-review--root) (error default-directory))
           :label (format "diff in %s" (buffer-name))
           :diff (buffer-substring-no-properties (point-min) (point-max))))))
-
-;;;; Review buffer
 
 (cl-defstruct (laya-review--hunk (:constructor laya-review--make-hunk))
   index data status job risk reason answers error jobs)
@@ -1385,8 +1352,7 @@ Unscored and failed hunks stay visible, since nothing vouches for them."
       (with-current-buffer buffer
         (let ((inhibit-read-only t) (line (line-number-at-pos)))
           (erase-buffer)
-          ;; diff-mode ignores text before the first file header, and each
-          ;; hunk gets its own header so hunks can be ordered by risk.
+          ;; diff-mode ignores text before the first file header.
           (insert (format "LAYA focused diff: %d of %d hunks at risk >= %.2f, riskiest first\n"
                           (length kept) (length hunks) laya-review-focus-threshold)
                   (format "%d hidden as low risk%s\n\n" (- (length scored) (length kept))
@@ -1396,8 +1362,7 @@ Unscored and failed hunks stay visible, since nothing vouches for them."
             (let ((data (laya-review--hunk-data hunk)))
               (insert (format "--- a/%s\n+++ b/%s\n" (plist-get data :file)
                               (if (plist-get data :deleted) "/dev/null" (plist-get data :file)))
-                      ;; The @@ line may carry any text after it, so the
-                      ;; risk rides there without breaking diff-mode.
+                      ;; diff-mode allows any text after the @@ line.
                       (let ((lines (split-string (plist-get data :text) "\n")))
                         (string-join (cons (format "%s  [risk %.2f · %s]" (car lines)
                                                    (laya-review--hunk-risk hunk)

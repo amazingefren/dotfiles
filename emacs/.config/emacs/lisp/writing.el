@@ -5,13 +5,10 @@
   :commands (org-agenda org-capture)
   :custom
   (org-directory "~/org")
-  ;; Every .org file in ~/org, skipping dated copies like x.backup-2026-09-23.org.
   (org-agenda-files '("~/org"))
   (org-agenda-file-regexp "\\`[^.][^.]*\\.org\\'")
   (org-agenda-window-setup 'current-window)
-  ;; Tags right after the title, so they stay visible in a narrow window.
   (org-agenda-tags-column 0)
-  ;; Cut the file-name column at 12 characters so long names keep lines aligned.
   (org-agenda-prefix-format
    '((agenda . " %i %-12.12:c%?-12t% s")
      (todo . " %i %-12.12:c")
@@ -19,10 +16,8 @@
      (search . " %i %-12.12:c")))
   (org-agenda-custom-commands
    '(("h" "This week and someday, then undated TODOs"
-      ;; Deadlines show on their own day; a week view needs no early warning.
       ((agenda "" ((org-agenda-span 'week)
                    (org-deadline-warning-days 0)))
-       ;; Someday reads as one more day after Sunday.
        (tags-todo "someday" ((org-agenda-overriding-header (writing-agenda-day-header "Someday"))
                              (org-agenda-block-separator nil)
                              (org-agenda-hide-tags-regexp "\\`someday\\'")
@@ -31,27 +26,20 @@
                     (org-agenda-skip-function #'writing-agenda-skip-someday)
                     (org-agenda-todo-ignore-scheduled 'all)
                     (org-agenda-todo-ignore-deadlines 'all)))))))
-  ;; C-c C-t offers these by letter.  WAITING and CANCELLED ask for a short
-  ;; note (who you're waiting on, why it was dropped), kept in a folded drawer.
   (org-todo-keywords
    '((sequence "TODO(t)" "WAITING(w@)" "|" "DONE(d)" "CANCELLED(c@)")))
   (org-log-into-drawer t)
   (org-default-notes-file "~/org/inbox.org")
-  ;; Tasks go to todo.org; notes and meetings under this week in weekly.org.
   (org-capture-templates
    '(("t" "Task" entry (file+headline "todo.org" "Tasks") "* TODO %?\n  %U")
      ("n" "Note" item (file+function "weekly.org" writing-weekly-notes) "%?")
      ("m" "Meeting" entry (file+function "weekly.org" writing-weekly-meetings) "* %^{Meeting}\n  %U\n  - %?")))
-  ;; M-RET adds the new heading after the whole entry (its dates and notes
-  ;; stay put) instead of splitting the heading at point.
   (org-insert-heading-respect-content t)
   (org-M-RET-may-split-line '((default . nil)))
   (org-startup-indented t)
   (org-hide-emphasis-markers t)
   :config
   (make-directory org-directory t)
-  ;; << and >> (and < / > on a visual selection) promote and demote the
-  ;; headings they cover; away from headings they shift lines as usual.
   (evil-define-operator writing-org-shift-left (beg end)
     "Promote the headings in BEG..END, or shift the lines left."
     :type line
@@ -72,9 +60,6 @@
   "A block header for the agenda that looks like a day named NAME."
   (lambda () (concat (propertize name 'face 'org-agenda-date) "\n")))
 
-;; Someday is a "when", like a date, kept as a :someday: tag so it goes with
-;; any state.  An entry has a schedule or the tag, never both: tagging drops
-;; the schedule, and scheduling drops the tag.
 (defun writing-someday-toggle ()
   "Toggle the :someday: tag on the entry at point, in an Org file or the agenda."
   (interactive)
@@ -105,15 +90,12 @@
 (with-eval-after-load 'org-agenda
   (define-key org-agenda-mode-map (kbd "C-c s") #'writing-someday-toggle))
 
-;; Deadlines in orange, whatever the theme: its `warning' color.
 (custom-set-faces
  '(org-imminent-deadline ((t :inherit warning)))
  '(org-upcoming-deadline ((t :inherit warning)))
  '(org-upcoming-distant-deadline ((t :inherit warning))))
 
-;;; Calendar: a read-only copy of the next weeks of one Calendar.app calendar,
-;;; written to calendar.org by icalBuddy (brew install ical-buddy), so the
-;;; agenda shows meetings next to tasks.  Edit events in Calendar, not here.
+;; calendar.org is written by icalBuddy (brew install ical-buddy).
 
 (defvar writing-calendar-name "efren@measuringu.com"
   "The Calendar.app calendar copied into calendar.org.")
@@ -170,7 +152,6 @@
 (when (executable-find "icalBuddy")
   (setq writing-calendar-timer (run-with-timer 0 900 #'writing-calendar-sync)))
 
-;; ? in the agenda lists its keys (evil ones included) in a searchable picker.
 (with-eval-after-load 'org-agenda
   (evil-define-key 'normal org-agenda-mode-map "?" #'embark-bindings))
 
@@ -203,7 +184,6 @@
     (while (not (eobp))
       (when (and (eq (get-text-property (point) 'org-agenda-type) 'tags)
                  (member "someday" (get-text-property (point) 'tags)))
-        ;; Put the color ahead of the plain text's `default'.
         (let ((pos (point)) (eol (line-end-position)))
           (while (< pos eol)
             (let ((next (next-single-property-change pos 'face nil eol)))
@@ -214,7 +194,6 @@
 
 (add-hook 'org-agenda-finalize-hook #'writing-agenda-show-waiting-notes)
 (add-hook 'org-agenda-finalize-hook #'writing-agenda-style-someday)
-;; Badges for tags, states and priorities in the agenda too, after the above.
 (add-hook 'org-agenda-finalize-hook #'org-modern-agenda 90)
 
 (defun writing-org--headings-p (beg end)
@@ -223,10 +202,7 @@
     (goto-char beg)
     (re-search-forward org-outline-regexp-bol end t)))
 
-;; Org shows its menus and capture buffers with `org-display-buffer-split',
-;; which deletes the other windows and splits the largest one left.  With
-;; herdr in the right side window that splits herdr, or finds nothing it may
-;; split and opens a new frame.  Split the main (non-side) area instead.
+;; `org-display-buffer-split' deletes other windows and splits into the herdr side window.
 (add-to-list 'display-buffer-alist
              '("\\`\\(?: ?\\*\\(?:Agenda Commands\\|Org \\(?:Select\\|Note\\|todo\\|tags\\)\\)\\*\\|CAPTURE-\\)"
                (display-buffer-reuse-window display-buffer-in-direction)
@@ -241,10 +217,6 @@
 
 (use-package org-modern
   :hook (org-mode . org-modern-mode))
-
-;;; Weekly notes: weekly.org is an Org date tree by ISO week (* 2026 / ** 2026-W40),
-;;; and each week has the same sections.  Tasks live in todo.org; the agenda
-;;; is the list of what's open.
 
 (defconst writing-weekly-sections '("Notes" "Meetings")
   "The headings every week in weekly.org gets, in order.")
@@ -290,10 +262,7 @@
   (require 'org)
   (consult-fd org-directory))
 
-;; PDFs open in xwidget (WebKit's PDF viewer): smooth continuous scrolling
-;; and selectable text, driven by mouse/trackpad (keys don't reach it).
-;; Visiting a .pdf returns an xwidget buffer instead of a file buffer, so
-;; C-x C-f, dired, SPC f r and friends all open it there.
+;; Keys don't reach the xwidget PDF view; it is driven by mouse/trackpad.
 (defun writing-pdf-in-xwidget (orig filename &optional nowarn rawfile wildcards)
   "Visit FILENAME in xwidget if it is a PDF, else call ORIG."
   (if (and (not rawfile)
@@ -335,8 +304,6 @@
                   (xwidget-webkit-browse-url url t)
                 (eww-open-file file))
               (current-buffer))))))
-
-;;; Keybindings
 
 (leader
   "oa" '(org-agenda :wk "agenda")

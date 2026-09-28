@@ -1,23 +1,21 @@
 ;;; vim.el --- evil (vim emulation) and the SPC leader key  -*- lexical-binding: t -*-
 
-;; evil: vim modes, motions, operators, text objects, registers, ex commands.
 (use-package evil
-  :pin melpa                          ; GNU ELPA release lags; 1.15.0 breaks on Emacs 31
+  :pin melpa                          ; GNU ELPA's 1.15.0 breaks on Emacs 31
   :demand t
   :init
-  ;; These must be set BEFORE evil loads, hence :init.
+  ;; Must be set before evil loads.
   (setq evil-want-integration t
-        evil-want-keybinding nil        ; don't bind keys in other modes; evil-collection does that better
-        evil-want-C-u-scroll t          ; C-u scrolls up like vim (instead of Emacs prefix arg)
-        evil-want-Y-yank-to-eol t       ; Y yanks to end of line (like nvim default)
-        evil-undo-system 'undo-redo     ; use Emacs 28+ built-in undo/redo for u and C-r
-        evil-respect-visual-line-mode t ; j/k move by screen line when lines wrap
+        evil-want-keybinding nil
+        evil-want-C-u-scroll t
+        evil-want-Y-yank-to-eol t
+        evil-undo-system 'undo-redo
+        evil-respect-visual-line-mode t
         evil-split-window-below t
         evil-vsplit-window-right t)
   :config
   (evil-mode 1)
 
-  ;; Esc gets out of everything: prompts, prefix keys, the minibuffer.
   (global-set-key [escape] #'keyboard-escape-quit)
   (dolist (map (list minibuffer-local-map
                      minibuffer-local-ns-map
@@ -26,8 +24,7 @@
                      minibuffer-local-isearch-map))
     (define-key map [escape] #'abort-minibuffers))
 
-  ;; Windows: C-h/j/k/l to move between splits, C-arrows to resize.
-  ;; (motion-state-map is inherited by normal state and by read-only buffers.)
+  ;; motion-state-map is inherited by normal state and by read-only buffers.
   (define-key evil-motion-state-map (kbd "C-h") #'evil-window-left)
   (define-key evil-motion-state-map (kbd "C-j") #'evil-window-down)
   (define-key evil-motion-state-map (kbd "C-k") #'evil-window-up)
@@ -37,11 +34,9 @@
   (global-set-key (kbd "C-<left>")  #'enlarge-window-horizontally)
   (global-set-key (kbd "C-<right>") #'shrink-window-horizontally)
 
-  ;; M-h / M-l: start / end of line.
   (define-key evil-motion-state-map (kbd "M-h") #'evil-first-non-blank)
   (define-key evil-motion-state-map (kbd "M-l") #'evil-end-of-line)
 
-  ;; < and > in visual mode indent and keep the selection, like `<gv' / `>gv'.
   (defun visual-shift-left ()
     (interactive)
     (evil-shift-left (region-beginning) (region-end))
@@ -55,55 +50,45 @@
   (define-key evil-visual-state-map (kbd "<") #'visual-shift-left)
   (define-key evil-visual-state-map (kbd ">") #'visual-shift-right)
 
-  ;; Deleted text (d, c, x, s, and text replaced by a visual paste) still
-  ;; goes to the kill ring for p, but not to the system clipboard; only
-  ;; yanks do.  c, x, and s all delete through `evil-delete'.
+  ;; c, x and s all delete through `evil-delete'.
   (defun vim--without-clipboard (fn &rest args)
     (let ((interprogram-cut-function nil))
       (apply fn args)))
   (advice-add 'evil-delete :around #'vim--without-clipboard)
   (advice-add 'evil-visual-paste :around #'vim--without-clipboard))
 
-;; evil-collection: vim keys in every other mode (magit, dired, help, terminals...).
 (use-package evil-collection
   :pin melpa
   :after evil
   :config
   (evil-collection-init))
 
-;; ys / cs / ds to add, change, delete surrounding quotes and brackets.
 (use-package evil-surround
   :after evil
   :config
   (global-evil-surround-mode 1))
 
-;; gcc / gc<motion> to toggle comments.
 (use-package evil-commentary
   :after evil
   :config
   (evil-commentary-mode 1))
 
-;; Visual undo tree (SPC s u).
 (use-package vundo
   :commands vundo)
 
-;; which-key: after pressing SPC (or any prefix), pop up what keys come next.
-;; Built in since Emacs 30.
 (use-package which-key
   :ensure nil
-  :custom (which-key-idle-delay 0.4)   ; seconds before the popup appears
+  :custom (which-key-idle-delay 0.4)
   :config
   (add-hook 'which-key-init-buffer-hook #'themes-popup-tint)
   (which-key-mode 1))
 
-;; general: a nicer way to define keybinds. Creates the `leader' macro used
-;; here and in every other lisp/ file to bind SPC keys.
 (use-package general
   :demand t
   :config
   (general-create-definer leader
-    :states '(normal visual motion)   ; leader works in these evil states
-    :keymaps 'override                ; ...and beats any mode's own bindings
+    :states '(normal visual motion)
+    :keymaps 'override
     :prefix "SPC")
 
   (define-advice evil-quit-all (:around (orig &optional bang) vim-confirm-quit)
@@ -120,8 +105,7 @@ Nothing restarts: buffers, terminals, agent sessions, and workspaces stay.
 For one file, `M-x eval-buffer' in it does the same thing faster."
     (interactive)
     (let ((t0 (float-time)))
-      ;; My own packages under site-lisp/ are already `provide'd, so a plain
-      ;; require would skip them. Load their files outright first.
+      ;; site-lisp packages are already `provide'd, so require would skip them.
       (dolist (file (file-expand-wildcards (expand-file-name "site-lisp/*/*.el" user-emacs-directory)))
         (load file nil 'nomessage))
       (load (expand-file-name "init.el" user-emacs-directory) nil 'nomessage)
@@ -133,15 +117,11 @@ For one file, `M-x eval-buffer' in it does the same thing faster."
     (let ((default-directory user-emacs-directory))
       (call-interactively #'find-file)))
 
-  ;; Top-level and general leader binds. :wk is the label which-key shows.
-  ;; Other prefixes live with their feature: SPC l lang.el, SPC g git.el,
-  ;; SPC o notes/browser/feeds/music.el, SPC TAB workspaces.el + home.el,
-  ;; SPC e tree.el, SPC t terminal.el, SPC w windows.el, SPC a agents.el.
   (leader
     "SPC" '(find-file-dwim :wk "find file")
     ":"   '(consult-complex-command :wk "command history")
     "y"   '(clipboard-kill-ring-save :wk "yank to clipboard")
-    "o"   '(:ignore t :wk "open")        ; org, browser, rss, spotify: notes/browser/feeds/music.el
+    "o"   '(:ignore t :wk "open")
 
     "f"  '(:ignore t :wk "find")
     "ff" '(find-file-dwim :wk "file")
@@ -157,7 +137,6 @@ For one file, `M-x eval-buffer' in it does the same thing faster."
     "bp" '(previous-buffer :wk "previous")
     "bd" '(kill-current-buffer :wk "kill")
 
-    ;; Help, Doom-style. SPC h r r reloads the config.
     "h"   '(:ignore t :wk "help")
     "hk"  '(describe-key :wk "key")
     "hv"  '(describe-variable :wk "variable")
@@ -184,6 +163,4 @@ For one file, `M-x eval-buffer' in it does the same thing faster."
     "sM" '(consult-man :wk "man")
     "su" '(vundo :wk "undo tree")
 
-    ;; C-u scrolls (evil-want-C-u-scroll), so the prefix argument lives here,
-    ;; as in Doom: SPC u SPC a a is what Emacs docs write as C-u SPC a a.
     "u" '(universal-argument :wk "prefix arg (C-u)")))

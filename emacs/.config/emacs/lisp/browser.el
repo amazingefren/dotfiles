@@ -11,11 +11,11 @@
 
 (use-package xwidget
   :ensure nil
-  :if (featurep 'xwidget-internal)          ; only if this Emacs was built with xwidgets
+  :if (featurep 'xwidget-internal)
   :commands (xwidget-webkit-browse-url)
   :custom
-  (browse-url-browser-function #'browser-ask)                           ; links ask where to open...
-  (browse-url-secondary-browser-function #'browse-url-default-macosx-browser) ; ...SPC u (C-u) first to force Safari
+  (browse-url-browser-function #'browser-ask)
+  (browse-url-secondary-browser-function #'browse-url-default-macosx-browser)
   (browse-url-handlers '(("\\`https?://\\([^/]+\\.\\)?github\\.com" . browse-url-default-macosx-browser))) ; GitHub needs your logged-in browser
   :config
   (add-hook 'window-size-change-functions #'browser-resize-xwidgets))
@@ -33,9 +33,9 @@
   (interactive
    (list (read-string "URL: " (or (car browser-url-history) "http://localhost:3000")
                       'browser-url-history)))
-  (let ((buffer (save-window-excursion       ; both browsers switch buffers themselves; capture instead
+  (let ((buffer (save-window-excursion   ; both browsers switch buffers themselves
                   (if (featurep 'xwidget-internal)
-                      (xwidget-webkit-browse-url url t)   ; t = new session, own buffer per SPC o b
+                      (xwidget-webkit-browse-url url t)
                     (eww url))
                   (current-buffer))))
     (select-window
@@ -70,8 +70,6 @@ URLs matching `browse-url-handlers' (GitHub) skip the question."
   "Open URL in the macOS default browser. Defaults to the current page or URL at point."
   (interactive (list (read-string "URL: " (browser-current-url))))
   (browse-url-default-macosx-browser url))
-
-;;; Keybindings
 
 (leader
   "ob" '(browser-open :wk "browser")

@@ -236,8 +236,6 @@ one agent read a different project's files."
   (let ((root (emacs-mcp--workspace-root arguments)))
     `((emacs_version . ,emacs-version)
       (workspace_root . ,root)
-      ;; Context is scoped to the agent's launch root.  In particular, the
-      ;; selected window is not used as a shortcut to another workspace.
       (visible_buffers .
                        ,(vconcat
                          (delq nil
@@ -484,8 +482,7 @@ Reject dirty or stale buffers and ambiguous matches before changing anything."
   "Run the fixed MCP METHOD with base64 JSON ENCODED-ARGUMENTS."
   (let* ((arguments (emacs-mcp--arguments encoded-arguments))
          (tool (concat "emacs_" method)))
-    ;; Record before dispatch so an unavailable root is visible in the dashboard.
-    ;; `emacs-mcp--record-activity' intentionally tolerates an unbound root.
+    ;; Record before dispatch so an unavailable root still shows in the dashboard.
     (condition-case nil
         (emacs-mcp--record-activity arguments tool "working")
       (error nil))

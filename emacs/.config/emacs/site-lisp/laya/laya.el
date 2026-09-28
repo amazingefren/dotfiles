@@ -1,8 +1,5 @@
 ;;; laya.el --- Lazy typed decisions from Emacs  -*- lexical-binding: t; -*-
 
-;; The wire protocol is JSON lines.  The worker is the sole owner of model
-;; state; merely loading this library does not start Python or load weights.
-
 (require 'cl-lib)
 (require 'json)
 (require 'subr-x)
@@ -119,8 +116,7 @@
 
 (defun laya--finish (job status &optional result error-object)
   (unless (member (laya--job-status job) '("succeeded" "failed" "cancelled"))
-    ;; A running cancellation is logical: the worker still occupies the one
-    ;; request slot.  Keep its deadline until a reply or worker termination.
+    ;; A cancelled active job still holds the worker's only request slot.
     (unless (and (equal status "cancelled") (eq job laya--active))
       (laya--clear-job-timer job))
     (setf (laya--job-status job) status

@@ -1,7 +1,5 @@
 ;;; op.el --- shared 1Password secrets  -*- lexical-binding: t -*-
 
-;; Named 1Password secrets, resolved once per Emacs session.
-
 (defcustom op-account "my.1password.com"
   "1Password account used by the CLI."
   :type 'string)
@@ -36,8 +34,7 @@
           (error-file (make-temp-file "emacs-op-error-")))
       (unwind-protect
           (progn
-            ;; `op inject' requires a template file. It contains references,
-            ;; not resolved secret values.
+            ;; `op inject' needs a template file; it holds references, not secret values.
             (with-temp-file template-file
               (dolist (entry op-secret-references)
                 (insert (symbol-name (car entry))

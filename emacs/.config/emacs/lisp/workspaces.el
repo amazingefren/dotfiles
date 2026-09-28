@@ -1,7 +1,6 @@
 ;;; workspaces.el --- project perspectives and tab-bar workspace UI  -*- lexical-binding: t -*-
 
-;; Loaded first so `project-find-functions' is special here: the `let's below
-;; that narrow it to git only work as dynamic bindings.
+;; Loaded first so the `let's of `project-find-functions' below bind dynamically.
 (require 'project)
 (declare-function herdr-workspace-children "herdr")
 (declare-function herdr-remember-session "herdr")
@@ -11,29 +10,23 @@
   :demand t
   :hook (persp-killed . (lambda () (remhash (persp-name (persp-curr)) workspace-roots)))
   :custom
-  (persp-initial-frame-name "home")        ; the perspective Emacs starts in (laid out by home.el)
-  (persp-mode-prefix-key (kbd "C-c w"))    ; its own key prefix; we use SPC TAB instead
-  (persp-show-modestring nil)              ; the tab bar shows perspectives, not the modeline
-  (persp-sort 'created)                    ; creation order (newest first; `workspace-names' flips it)
+  (persp-initial-frame-name "home")        ; laid out by home.el
+  (persp-mode-prefix-key (kbd "C-c w"))
+  (persp-show-modestring nil)
+  (persp-sort 'created)                    ; newest first; `workspace-names' flips it
   (persp-suppress-no-prefix-key-warning t)
   :config
   (persp-mode 1))
 
-;; Close an open transient menu (magit, forge @) before switching workspace.
-;; Menus like forge's let other commands run while they stay open, so
-;; without this the menu follows you into the next workspace.
+;; Menus like forge's stay open across commands and would follow you.
 (defun workspace-close-menus ()
   (when (bound-and-true-p transient--prefix)
     (transient--emergency-exit :workspace-switch)))
 (add-hook 'persp-before-switch-hook #'workspace-close-menus)
 
-;; Show the current perspective's buffers in SPC b b. Press b then SPC in the
-;; picker to see every buffer instead.
 (with-eval-after-load 'consult
   (consult-customize consult-source-buffer :hidden t :default nil)
   (add-to-list 'consult-buffer-sources 'persp-consult-source))
-
-;;; Tab bar: perspectives + agent status --------------------------------------
 
 (defvar workspace-order nil
   "Workspace names in the order the tab bar shows them.
@@ -43,7 +36,7 @@ or SPC TAB < and >, to move one. Home always stays first.")
 (defun workspace-names ()
   "Workspace names in tab-bar order: home, then `workspace-order'.
 Workspaces not yet in the order are added at the end, oldest first."
-  (let* ((live (reverse (persp-names)))     ; creation order, oldest first
+  (let* ((live (reverse (persp-names)))
          (order (append (seq-filter (lambda (n) (member n live)) workspace-order)
                         (seq-remove (lambda (n) (member n workspace-order)) live))))
     (setq workspace-order (if (member "home" order) (cons "home" (delete "home" order)) order))))
@@ -212,7 +205,6 @@ own layout, buffers, and herdr session."
       (error (message "herdr: %s (the workspace won't come back after a restart)"
                       (error-message-string err))))))
 
-;; Keep a renamed workspace's place and root.
 (defvar workspace--renaming nil)
 (add-hook 'persp-before-rename-hook (lambda () (setq workspace--renaming (persp-current-name))))
 (add-hook 'persp-after-rename-hook
@@ -231,8 +223,6 @@ herdr-mode sets it to draw the agent counts.")
 (defun workspace--tab-item (key label face command help)
   "A tab-bar item for KEY showing LABEL in FACE, running COMMAND on click."
   (let ((label (copy-sequence label)))
-    ;; Paint the tab background under the whole label, counts included,
-    ;; so it reads as one pill; the count colors stay on top.
     (add-face-text-property 0 (length label) face t label)
     `(,key menu-item ,label ,command :help ,help)))
 
@@ -270,8 +260,6 @@ how many children it has and counts all of their agents."
              (project (workspace--project name))
              (number (lambda (face) (propertize (format " %d " i) 'face (list 'shadow face)))))
         (cond
-         ;; Flat, a worktree right after its project shows only its @branch,
-         ;; so the two read as a group.
          ((and (null (cdr slot)) (or (not workspace-nest-children) (equal name project)))
           (let* ((face (if (equal name current) 'tab-bar-tab 'tab-bar-tab-inactive))
                  (grouped (and previous (string-match-p "@" name)
@@ -284,7 +272,6 @@ how many children it has and counts all of their agents."
                    face (lambda () (interactive) (persp-switch name))
                    (format "Switch to %s; drag to move" name))
                   items)))
-         ;; The current project: a header, then one tab per child.
          ((member current slot)
           (push (workspace--tab-item
                  (intern (concat "project:" project))
@@ -306,7 +293,6 @@ how many children it has and counts all of their agents."
                      face (lambda () (interactive) (persp-switch child))
                      (format "Switch to %s" child))
                     items))))
-         ;; Another project with children: collapsed, with the child count.
          (t
           (let ((extra (seq-count (lambda (n) (not (equal n project))) slot)))
             (push (workspace--tab-item
@@ -323,8 +309,7 @@ how many children it has and counts all of their agents."
         (push (workspace--divider (format "gap:%d" i)) items)))
     (nreverse (cdr items))))
 
-;; The tab bar's own mouse commands act on tab-bar tabs, which we hide; these
-;; act on the workspaces drawn in their place.
+;; tab-bar's own mouse commands act on its tabs, which are hidden.
 (defun workspace--at (posn)
   "The tab at POSN: (NAME . PROJECT-P), or nil.
 NAME is a workspace, or for a nested project tab, its last-visited child."
@@ -380,7 +365,7 @@ onto a sibling reorders the children."
   :ensure nil
   :custom
   (tab-bar-show t)
-  (tab-bar-format '(workspace-tab-bar-format))   ; the bar is drawn entirely from perspectives
+  (tab-bar-format '(workspace-tab-bar-format))
   :config
   (tab-bar-mode 1)
   (keymap-set tab-bar-map "<drag-mouse-1>" #'workspace-mouse-move)
@@ -391,8 +376,7 @@ onto a sibling reorders the children."
   (keymap-set tab-bar-map "<wheel-down>" #'workspace-next)
   (add-hook 'persp-switch-hook (lambda () (force-mode-line-update t))))
 
-;; Tab line: buffer tabs above each window, under the workspace bar.
-;; gt/gT move between them, as in vim (evil binds them to hidden tab-bar tabs).
+;; evil binds gt/gT to the hidden tab-bar tabs.
 (use-package tab-line
   :ensure nil
   :config
@@ -401,8 +385,6 @@ onto a sibling reorders the children."
     (evil-define-key 'motion 'global
       "gt" #'tab-line-switch-to-next-tab
       "gT" #'tab-line-switch-to-prev-tab)))
-
-;;; Workspace root
 
 (defvar workspace-roots (make-hash-table :test #'equal)
   "Perspective name -> the folder it was opened on.")
@@ -425,22 +407,20 @@ SPC f f, SPC f g, new shells, agent sessions, and the tree follow it."
       (save-selected-window (tree-show-root dir)))
     (message "Workspace root: %s" (abbreviate-file-name dir))))
 
-;;; Open a project (or any folder) in its own perspective -------------------
-
 (defun workspace-open-project (dir &optional name)
   "Open DIR in its own perspective, creating it if needed.
 The perspective is called NAME, or after DIR's folder.
 A project (git repo, or a folder with a .project file) gets the file picker;
 a plain folder gets dired. Used by SPC f p and SPC TAB n."
   (interactive (list (project-prompt-project-dir)))
-  (let* ((dir (file-name-as-directory (file-truename dir)))   ; resolve symlinks, like find-file does
+  (let* ((dir (file-name-as-directory (file-truename dir)))
          (name (or name (file-name-nondirectory (directory-file-name dir))))
          (existed (member name (persp-names))))
     (persp-switch name)
     (unless existed
-      (puthash name dir workspace-roots)   ; remembered for `workspace-root'
-      (setq default-directory dir)         ; the perspective's scratch buffer starts here
-      ;; Before the file picker, so quitting it (C-g) still leaves all of this done.
+      (puthash name dir workspace-roots)
+      (setq default-directory dir)
+      ;; Before the file picker, so C-g there still leaves this done.
       (if (string-search "@" name)
           (progn (workspace--place-with-project name)
                  (workspace--register-in-herdr))
@@ -448,11 +428,6 @@ a plain folder gets dired. Used by SPC f p and SPC TAB n."
       (if (let ((project-find-functions '(project-try-vc))) (project-current nil dir))
           (let ((default-directory dir)) (project-find-file))
         (dired dir)))))
-
-;;; Bring back a project's children -----------------------------------------
-;; Opening a project also opens its worktrees and sub-workspaces, found on
-;; disk and in herdr, without switching to them. Only the workspaces come
-;; back: each starts with a fresh layout, and its agents are still in herdr.
 
 (defun workspace--children-on-disk (project dir)
   "PROJECT's children as (NAME . ROOT): git worktrees, then herdr spaces.
@@ -493,12 +468,6 @@ project is opened; run it by hand to pick up ones made elsewhere."
       (message "Opened %s: %s" (if (cdr new) (format "%d children" (length new)) "1 child")
                (mapconcat (lambda (c) (substring (car c) (1+ (string-search "@" (car c))))) new ", ")))
     new))
-
-;;; Git worktrees as workspaces ----------------------------------------------
-;; A worktree is a full workspace like any other, named project@branch so it
-;; never collides with the main checkout's. It gets its own root, buffers,
-;; and herdr session. Worktrees live next to the main checkout, as
-;; ../project-branch.
 
 (defun workspace--git (dir &rest args)
   "Run git ARGS in DIR and return its output lines, or signal its error."
@@ -547,8 +516,6 @@ new name; a new branch starts from the main checkout's current commit."
       (setq path (file-name-as-directory
                   (expand-file-name (format "%s-%s" project (replace-regexp-in-string "[^A-Za-z0-9_.-]" "-" branch))
                                     (file-name-directory (directory-file-name main)))))
-      ;; An existing branch (local, or remote that git tracks for us) is
-      ;; checked out; any other name becomes a new branch.
       (if (member branch (workspace--branches main))
           (workspace--git main "worktree" "add" path branch)
         (workspace--git main "worktree" "add" "-b" branch path))
@@ -593,10 +560,6 @@ while it has uncommitted changes. A sub-workspace only closes."
         (workspace--git main "worktree" "remove" (car tree))
         (message "Removed worktree %s (branch %s kept)" (abbreviate-file-name (car tree)) (cdr tree))))))
 
-;;; Keybindings
-
-;; s-1 .. s-9 jump to a tab (nested: a project; press it again for the
-;; project's next child); s-[ s-] cycle tabs; s-{ s-} cycle the children.
 (dotimes (n 9)
   (let ((i (1+ n)))
     (global-set-key (kbd (format "s-%d" i)) (lambda () (interactive) (workspace-goto i)))))

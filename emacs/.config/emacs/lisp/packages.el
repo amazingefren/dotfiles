@@ -24,9 +24,7 @@
 (when (fboundp 'package-vc-install)
   (advice-add 'package-vc-install :around #'packages--compile-after-install))
 
-;; Upgrades come from MELPA, which changes daily, and package.el has no
-;; lockfile.  Snapshot the package directory first so a bad upgrade can be
-;; undone.
+;; package.el has no lockfile and MELPA changes daily, so snapshot before upgrading.
 (defvar packages-snapshot-directory
   (expand-file-name "emacs/elpa-snapshots/" (xdg-data-home))
   "Where `packages-upgrade-with-rollback' keeps copies of `package-user-dir'.")

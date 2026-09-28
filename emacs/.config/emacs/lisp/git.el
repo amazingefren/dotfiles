@@ -1,17 +1,12 @@
 ;;; git.el --- magit and gutter diffs  -*- lexical-binding: t -*-
 
-;; magit: the git UI. SPC g g opens status; from there s stages, u unstages,
-;; c c commits, P p pushes, F p pulls, ? shows every key.
 (use-package magit
   :commands (magit-status magit-blame-addition magit-log-current
              magit-log-buffer-file magit-diff-working-tree
              magit-diff-range magit-branch-checkout)
   :custom
-  ;; Open magit in the current window instead of splitting, except for diffs.
   (magit-display-buffer-function #'magit-display-buffer-same-window-except-diff-v1)
-  ;; Where my repos live (dir . depth). SPC g g from a buffer that isn't inside a
-  ;; repo (dired on a folder of repos, a shell, the home workspace) picks from these
-  ;; instead of asking for a path, and SPC g G lists them all with their state.
+  ;; (dir . depth)
   (magit-repository-directories '(("~/Code" . 2) ("~/.dotfiles" . 0)))
   (magit-repolist-columns '(("Name" 25 magit-repolist-column-ident nil)
                             ("Branch" 20 magit-repolist-column-branch nil)
@@ -20,7 +15,6 @@
                             ("↑" 3 magit-repolist-column-unpushed-to-upstream ((:right-align t)))
                             ("Path" 40 magit-repolist-column-path nil)))
   :config
-  ;; SPC g m: what this branch changed, like diffview merge_base.
   (defun magit-diff-merge-base ()
     "Diff the working tree against the merge base with the main branch."
     (interactive)
@@ -40,21 +34,20 @@
   (advice-add 'ghub--username :around #'git-github-username)
   (advice-add 'ghub--token :around #'git-github-token))
 
-;; diff-hl: changed / added / removed markers in the left fringe (gitsigns).
 (use-package diff-hl
-  :hook ((magit-pre-refresh  . diff-hl-magit-pre-refresh)   ; keep in sync when
-         (magit-post-refresh . diff-hl-magit-post-refresh))  ; magit stages/commits
+  :hook ((magit-pre-refresh  . diff-hl-magit-pre-refresh)
+         (magit-post-refresh . diff-hl-magit-post-refresh))
   :custom
-  (diff-hl-show-hunk-function #'diff-hl-show-hunk-inline-popup) ; the diff unfolds under the hunk, in the buffer
+  (diff-hl-show-hunk-function #'diff-hl-show-hunk-inline-popup)
+  ;; Each on-the-fly diff blocks input ~30ms (async mode longer).
+  (diff-hl-flydiff-delay 2)
   :init
   (global-diff-hl-mode 1)
   :config
-  (diff-hl-flydiff-mode 1)      ; update as you type, not only on save
-  (require 'diff-hl-show-hunk)  ; the unfold command and its inline popup aren't autoloaded
+  (diff-hl-flydiff-mode 1)
+  (require 'diff-hl-show-hunk)  ; not autoloaded
   (require 'diff-hl-show-hunk-inline)
-  (global-diff-hl-show-hunk-mouse-mode 1))  ; click a fringe mark to unfold its diff
-
-;;; Keybindings
+  (global-diff-hl-show-hunk-mouse-mode 1))
 
 (leader
   "g"  '(:ignore t :wk "git")

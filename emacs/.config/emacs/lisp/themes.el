@@ -27,8 +27,6 @@
     (with-temp-file themes-file (prin1 theme (current-buffer)))
     (message "Theme %s saved" theme)))
 
-;; Short-lived pop-ups (which-key, Org's letter menus) open right under other
-;; windows; a background one shade off the theme's sets them apart.
 (defvar-local themes--popup-tint nil "Face-remap cookies of this buffer's tint.")
 
 (defun themes-popup-tint ()
@@ -49,4 +47,4 @@
             (dolist (b (buffer-list))
               (with-current-buffer b (when themes--popup-tint (themes-popup-tint))))))
 
-(themes-load-saved 'modus-vivendi)   ; the SPC h r t binding lives in vim.el
+(themes-load-saved 'modus-vivendi)

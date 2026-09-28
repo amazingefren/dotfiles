@@ -1,8 +1,6 @@
 ;;; ai-intelligence.el --- Read-only editor intelligence for AI tools -*- lexical-binding: t -*-
 
-;; This module deliberately contains no general command or evaluation entry
-;; point.  It is intended to be called by the fixed Emacs MCP dispatcher, with
-;; the dispatcher remaining responsible for choosing and authorizing buffers.
+;; Deliberately no general command or eval entry point; the MCP dispatcher authorizes buffers.
 
 (require 'cl-lib)
 (require 'project)
@@ -232,8 +230,7 @@ module is the fixed command `git -C ROOT status --porcelain=v1 --branch -z'."
               (let* ((code (substring field 0 2))
                      (renamed-or-copied (or (string-match-p "R" code)
                                             (string-match-p "C" code)))
-                     ;; With -z, Git places the old pathname in the next
-                     ;; record for rename/copy entries.
+                     ;; With -z, Git puts a rename/copy's old path in the next record.
                      (original (and renamed-or-copied (pop fields))))
                 (push (emacs-ai-intelligence--git-status-entry field original) entries))))
           `((root . ,root)
@@ -364,8 +361,6 @@ The return value is a cons whose car is the links and cdr says whether one or
 more additional unique links were present."
   (let ((position (point-min)) links
         (seen (make-hash-table :test #'equal)))
-    ;; Read one extra link so `links_truncated' remains truthful without
-    ;; collecting an unbounded page-wide list.
     (while (and (< position (point-max)) (<= (length links) limit))
       (let* ((url (get-text-property position 'shr-url))
              (next (next-single-property-change position 'shr-url nil (point-max))))

@@ -1,6 +1,5 @@
 ;;; environment.el --- macOS environment and appearance  -*- lexical-binding: t -*-
 
-;; Import the shell PATH before packages look for executables.
 (use-package exec-path-from-shell
   :if (eq system-type 'darwin)
   :demand t

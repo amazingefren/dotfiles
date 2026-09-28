@@ -1,8 +1,5 @@
 ;;; live-diff.el --- Follow CLI edits in Emacs review windows -*- lexical-binding: t -*-
 
-;; Codex and Claude can write through their native CLI tools.  This module
-;; observes file changes, so neither agent needs to opt in to an MCP tool.
-
 (require 'cl-lib)
 (require 'diff-mode)
 (require 'project)
@@ -645,7 +642,6 @@ first file in Git's alphabetical diff order."
                                  (and (re-search-backward "^diff --git " nil t)
                                       (point)))))
       (cond
-       ;; A newly appended file begins after the preceding file's last hunk.
        ((and previous-file (or (null previous-hunk)
                                (> previous-file previous-hunk)))
         (goto-char previous-file)
@@ -748,8 +744,6 @@ first file in Git's alphabetical diff order."
   "Return the line before which to show text removed from OLD to NEW."
   (let ((start (live-diff--change-position old new)))
     (+ 1 (cl-count ?\n new :end start)
-       ;; The deleted span can begin at the newline after a surviving line.
-       ;; In that case, show it below that line, before the next one.
        (if (and (< start (length old)) (eq (aref old start) ?\n)) 1 0))))
 
 (defun live-diff--show-removed (buffer line removed &optional window)
@@ -873,9 +867,7 @@ first file in Git's alphabetical diff order."
         (erase-buffer)
         (insert text)
         (when changed-file
-          ;; Select a major mode from FILE without making this a visiting
-          ;; buffer.  Skip file-mode hooks that start LSP, project tools, or
-          ;; grammar installation; this buffer is only a read-only preview.
+          ;; Skip hooks that start LSP, project tools or grammar installation.
           (let ((buffer-file-name file)
                 (treesit-auto-install-grammar nil))
             (delay-mode-hooks (set-auto-mode)))

@@ -32,8 +32,7 @@ browser instead of creating more xwidget buffers and windows."
                      (xwidget-webkit-goto-uri
                       (xwidget-webkit-current-session) url)
                      (current-buffer))
-                 ;; A WebKit session may have been closed while its buffer
-                 ;; survived.  Make a fresh one in that case.
+                 ;; The WebKit session may be gone while its buffer survives.
                  (error nil))
              nil)))
       (unless buffer
@@ -82,23 +81,20 @@ browser instead of creating more xwidget buffers and windows."
 (use-package elfeed
   :commands (elfeed elfeed-update)
   :custom
-  (elfeed-search-filter "@2-weeks-ago +unread")     ; default view: unread from the last two weeks
+  (elfeed-search-filter "@2-weeks-ago +unread")
   (elfeed-search-title-max-width 90)
   (elfeed-curl-max-connections 8)
   (elfeed-feeds nil)
   :config
-  ;; Resolve the 1Password references only when Elfeed is initialized.
   (setq elfeed-feeds (list (feeds-yarr-source)))
-  ;; Keep the existing starred-entry keybinding.
   (defalias 'elfeed-toggle-star (elfeed-expose #'elfeed-search-toggle-all 'star))
-  ;; evil-collection only covers tagging; give the rest of elfeed's own keys
-  ;; back their meaning in normal state (evil would otherwise use b/r/s for motions).
+  ;; evil-collection only covers tagging; evil would otherwise use b/r/s for motions.
   (evil-define-key 'normal elfeed-search-mode-map
     (kbd "RET") #'elfeed-search-show-entry
     "b" #'feeds-search-browse-in-split
     "B" #'feeds-search-browse-externally
-    "r" #'elfeed-search-untag-unread     ; mark read
-    "u" #'elfeed-search-tag-unread       ; mark unread (evil-collection had these backwards)
+    "r" #'elfeed-search-untag-unread
+    "u" #'elfeed-search-tag-unread       ; evil-collection has r/u backwards
     "s" #'elfeed-search-live-filter
     "R" #'elfeed-update
     "*" #'elfeed-toggle-star
@@ -118,8 +114,7 @@ browser instead of creating more xwidget buffers and windows."
   :custom
   (elfeed-protocol-enabled-protocols '(fever))
   (elfeed-protocol-fever-fetch-category-as-tag t)
-  ;; Yarr article IDs can have large gaps. Fetch the actual unread IDs
-  ;; instead of only the next 50 consecutive IDs after the saved cursor.
+  ;; Yarr IDs have large gaps; otherwise only the next 50 IDs after the cursor are fetched.
   (elfeed-protocol-fever-update-unread-only t)
   :config
   (elfeed-protocol-enable)
@@ -127,7 +122,7 @@ browser instead of creating more xwidget buffers and windows."
     (cancel-timer feeds-update-timer))
   (setq feeds-update-timer (run-at-time 0 (* 5 60) #'feeds-refresh)))
 
-;; Saved Elfeed filters. Yarr folders arrive as tags via Fever.
+;; Yarr folders arrive as tags via Fever.
 (defvar feeds-filters
   '(("all unread"     . "@2-weeks-ago +unread")
     ("starred"        . "+star")
@@ -154,7 +149,5 @@ browser instead of creating more xwidget buffers and windows."
   (persp-switch "home")
   (elfeed)
   (feeds-refresh))
-
-;;; Keybindings
 
 (leader "or" '(feeds-open :wk "rss"))

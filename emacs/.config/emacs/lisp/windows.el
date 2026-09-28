@@ -8,7 +8,6 @@
 (use-package olivetti
   :commands olivetti-mode)
 
-
 (defvar-keymap windows-resize-repeat-map
   :repeat t
   "+" #'enlarge-window
@@ -19,11 +18,7 @@
 
 (repeat-mode 1)
 
-;;; Keybindings
-
 (leader
-  ;; Back out of whatever a command just showed: closes a window it opened,
-  ;; or brings back the buffer it replaced (e.g. the agenda after RET).
   "q"  '(quit-window :wk "close / back")
   "w"  '(:ignore t :wk "window")
   "w=" '(balance-windows :wk "balance")

@@ -51,8 +51,7 @@ MCP arguments by `bin/emacs-mcp'.")
       (user-error "Emacs MCP server is missing or not executable: %s" program))
     (unless (and (stringp root) (file-directory-p root))
       (user-error "Cannot start Emacs MCP without an agent workspace root"))
-    ;; Codex maps these dotted config values to [mcp_servers.emacs.env].
-    ;; `json-serialize' supplies valid TOML basic strings for paths and names.
+    ;; `json-serialize' output is a valid TOML basic string, which Codex's -c values need.
     (list "-c" (format "mcp_servers.emacs.command=%S" program)
           "-c" (format "mcp_servers.emacs.env.EMACS_MCP_WORKSPACE_ROOT=%s"
                        (json-serialize (file-truename root)))
@@ -174,12 +173,6 @@ state or a model-controlled tool argument."
     (herdr--show session (format "%s" pane))
     t))
 
-;;; Keybindings
-
-;; Pane, tab, and shell management happens inside the herdr side window;
-;; these are only the Emacs-side entry points.  Everything unbound here
-;; (rename, kill, set default kind, MCP activity log) is still on M-x,
-;; and rename/kill are also `r'/`x' in the SPC a v overview.
 (leader
   "a"  '(:ignore t :wk "agent")
   "aa" '(herdr-start :wk "new agent tab (SPC u: pick kind)")

@@ -1,28 +1,19 @@
-# herdr config for sessions run from Emacs (site-lisp/herdr, `herdr-config-file').
-# herdr started outside Emacs keeps using ~/.config/herdr/config.toml.
-# Running sessions can reload this with `herdr --session <s> server reload-config`;
-# a new Emacs Herdr client picks it up when attached.
-# All options: `herdr --default-config'.
+# Only herdr started from Emacs reads this (HERDR_CONFIG_PATH); others use ~/.config/herdr/config.toml.
 
 onboarding = false
 
 [theme]
-# Use the terminal's ANSI palette, which ghostel takes from the Emacs theme.
 name = "terminal"
 
 [theme.custom]
-panel_bg = "reset" # Keep the panel on the terminal's default background.
-# Text in the terminal's default foreground too.  "terminal" otherwise draws
-# it in bright white, which light themes (e.g. ef-melissa-light) set to the
-# background color, so tab names vanish.  overlay1 is the tab names.
+panel_bg = "reset"
+# Light themes set bright white to the background color, so text would vanish.
 text = "reset"
 subtext0 = "reset"
 overlay1 = "reset"
 
 [keys]
 prefix = "ctrl+a"
-# Emacs owns spaces. Herdr's keyboard stays within the selected space;
-# SPC a a creates agent tabs, and SPC a v navigates the space tree.
 new_workspace = ""
 new_worktree = ""
 workspace_picker = ""
@@ -32,23 +23,17 @@ close_workspace = ""
 toggle_sidebar = ""
 navigate_workspace_up = ""
 navigate_workspace_down = ""
-# Emacs keeps C-h and C-l (window moves), so pane focus stays on the
-# prefix: C-a h/j/k/l.
 next_agent = "prefix+shift+j"
 previous_agent = "prefix+shift+k"
 focus_agent = "prefix+alt+1..9"
 
 [ui]
-# Emacs names each space after its workspace and each new tab after its agent.
-# Keep a prompt for the mouse/menu path to avoid accidental unnamed spaces.
 prompt_new_workspace_name = true
 hide_tab_bar_when_single_tab = true
 show_agent_labels_on_pane_borders = true
-# Emacs shows spaces, agents, and terminals through SPC a v.
 sidebar_start_collapsed = true
 sidebar_collapsed_mode = "hidden"
 
-# Emacs already notifies when an agent needs you (`herdr-notify').
 [ui.toast]
 delivery = "off"
 

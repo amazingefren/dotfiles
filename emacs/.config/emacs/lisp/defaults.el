@@ -17,7 +17,6 @@
       highlight-nonselected-windows nil
       ffap-machine-p-known 'reject)
 
-;; Use UTF-8 and Unix line endings for new files.
 (set-language-environment "UTF-8")
 (prefer-coding-system 'utf-8-unix)
 (set-default-coding-systems 'utf-8-unix)

@@ -17,7 +17,6 @@
   :config
   (editorconfig-mode 1))
 
-;; Infer an existing file's indentation when the project does not declare it.
 (use-package dtrt-indent
   :custom
   (dtrt-indent-verbosity 0)
