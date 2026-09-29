@@ -52,9 +52,13 @@ def recent_status(path):
 
 
 def descendants(roots):
+    """The live subagents under ROOTS, and the CLI version each root started with."""
     roots = set(roots)
     children = {}
+    versions = {}
     for entry, path in sessions():
+        if entry.get("id") in roots and entry.get("cli_version"):
+            versions[entry["id"]] = entry["cli_version"]
         parent = entry.get("parent_thread_id")
         if parent and entry.get("id"):
             children.setdefault(parent, []).append((entry, path))
@@ -84,7 +88,7 @@ def descendants(roots):
                 item.update(parent_thread_id=visible_parent, role=role, status=status)
                 found.append(item)
                 queue.append((thread_id, thread_id))
-    return found
+    return {"children": found, "versions": versions}
 
 
 if __name__ == "__main__":

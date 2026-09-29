@@ -43,3 +43,6 @@ fish/.config/fish/fish_variables
 /emacs/.config/emacs/agents/
 emacs/.config/emacs/etc/*
 !emacs/.config/emacs/etc/herdr.toml
+!emacs/.config/emacs/etc/agents.md
+# Proprietary Emacs packages: kept out of this public repo on purpose.
+/emacs/.config/emacs/private/

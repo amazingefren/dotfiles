@@ -50,12 +50,82 @@
   (define-key evil-visual-state-map (kbd "<") #'visual-shift-left)
   (define-key evil-visual-state-map (kbd ">") #'visual-shift-right)
 
-  ;; c, x and s all delete through `evil-delete'.
-  (defun vim--without-clipboard (fn &rest args)
-    (let ((interprogram-cut-function nil))
-      (apply fn args)))
-  (advice-add 'evil-delete :around #'vim--without-clipboard)
-  (advice-add 'evil-visual-paste :around #'vim--without-clipboard))
+  ;; Vim's two clipboards: y, d, c, x and p use the kill ring (vim's unnamed
+  ;; register), and only the Cmd keys reach the system clipboard (vim's "+).
+  (setq select-enable-clipboard nil)
+
+  (evil-define-operator vim-yank-to-system (beg end type)
+    "Copy the text moved over to the system clipboard."
+    :move-point nil
+    :repeat nil
+    (evil-yank beg end type ?+))
+
+  (evil-define-operator vim-cut-to-system (beg end type)
+    "Cut the text moved over to the system clipboard."
+    (evil-delete beg end type ?+))
+
+  (defun vim-copy-region-to-system (beg end)
+    "Copy the region to the system clipboard."
+    (interactive "r")
+    (gui-set-selection 'CLIPBOARD (buffer-substring-no-properties beg end))
+    (deactivate-mark))
+
+  (defun vim-cut-region-to-system (beg end)
+    "Cut the region to the system clipboard."
+    (interactive "r")
+    (gui-set-selection 'CLIPBOARD (buffer-substring-no-properties beg end))
+    (delete-region beg end))
+
+  (defun vim-paste-from-system ()
+    "Paste the system clipboard, leaving vim's registers alone."
+    (interactive)
+    (let ((text (gui-get-selection 'CLIPBOARD 'UTF8_STRING)))
+      (unless text (user-error "The system clipboard is empty"))
+      (cond ((and (derived-mode-p 'ghostel-mode) (fboundp 'ghostel--paste-text))
+             (ghostel--paste-text (substring-no-properties text)))
+            ((and (bound-and-true-p evil-local-mode) (evil-visual-state-p))
+             (evil-visual-paste 1 ?+))
+            ((and (bound-and-true-p evil-local-mode) (memq evil-state '(normal motion)))
+             (evil-paste-after 1 ?+))
+            (t (insert-for-yank text)))))
+
+  (global-set-key (kbd "s-c") #'vim-copy-region-to-system)
+  (global-set-key (kbd "s-y") #'vim-copy-region-to-system)
+  (global-set-key (kbd "s-x") #'vim-cut-region-to-system)
+  (global-set-key (kbd "s-v") #'vim-paste-from-system)
+  (evil-define-key '(normal visual) 'global (kbd "s-y") #'vim-yank-to-system)
+  (evil-define-key 'visual 'global
+    (kbd "s-c") #'vim-yank-to-system
+    (kbd "s-x") #'vim-cut-to-system)
+
+  ;; Deleting while typing, as vim's insert-mode C-w and C-u do, fills no register.
+  (defun vim-delete-word-backward (arg)
+    "Delete ARG words before point."
+    (interactive "p")
+    (delete-region (point) (progn (backward-word arg) (point))))
+
+  (defun vim-delete-word (arg)
+    "Delete ARG words after point."
+    (interactive "p")
+    (delete-region (point) (progn (forward-word arg) (point))))
+
+  (defun vim-delete-line-backward ()
+    "Delete from the line's start to point, or join the line above at its start."
+    (interactive)
+    (if (bolp) (delete-char -1) (delete-region (line-beginning-position) (point))))
+
+  (defun vim-delete-backward-word ()
+    "Delete the word before point, as `evil-delete-backward-word' does."
+    (interactive)
+    (if (bolp) (delete-char -1)
+      (delete-region (max (save-excursion (evil-backward-word-begin) (point))
+                          (line-beginning-position))
+                     (point))))
+
+  (global-set-key [remap backward-kill-word] #'vim-delete-word-backward)
+  (global-set-key [remap kill-word] #'vim-delete-word)
+  (global-set-key [remap evil-delete-backward-word] #'vim-delete-backward-word)
+  (global-set-key (kbd "s-<backspace>") #'vim-delete-line-backward))
 
 (use-package evil-collection
   :pin melpa
@@ -106,7 +176,8 @@ For one file, `M-x eval-buffer' in it does the same thing faster."
     (interactive)
     (let ((t0 (float-time)))
       ;; site-lisp packages are already `provide'd, so require would skip them.
-      (dolist (file (file-expand-wildcards (expand-file-name "site-lisp/*/*.el" user-emacs-directory)))
+      (dolist (file (append (file-expand-wildcards (expand-file-name "site-lisp/*/*.el" user-emacs-directory))
+                            (file-expand-wildcards (expand-file-name "private/*/*.el" user-emacs-directory))))
         (load file nil 'nomessage))
       (load (expand-file-name "init.el" user-emacs-directory) nil 'nomessage)
       (message "Config reloaded in %.2fs" (- (float-time) t0))))
@@ -120,7 +191,7 @@ For one file, `M-x eval-buffer' in it does the same thing faster."
   (leader
     "SPC" '(find-file-dwim :wk "find file")
     ":"   '(consult-complex-command :wk "command history")
-    "y"   '(clipboard-kill-ring-save :wk "yank to clipboard")
+    "y"   '(vim-yank-to-system :wk "yank to clipboard")
     "o"   '(:ignore t :wk "open")
 
     "f"  '(:ignore t :wk "find")

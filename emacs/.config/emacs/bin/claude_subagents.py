@@ -66,7 +66,7 @@ def transcript_path(session_id):
 
 
 def transcript_stats(path, tail=262144):
-    """Context in use, model, branch, and last-activity time, from the log tail.
+    """Context in use, model, branch, CLI version and last activity, from the log tail.
 
     The context is what the last main-thread turn sent: its fresh, cache-read,
     and cache-written input tokens.  Only these fields are read.
@@ -85,7 +85,11 @@ def transcript_stats(path, tail=262144):
             entry = json.loads(line)
         except ValueError:
             continue
-        message = entry.get("message") if isinstance(entry, dict) else None
+        if not isinstance(entry, dict):
+            continue
+        if "version" not in stats and entry.get("version"):
+            stats["version"] = entry["version"]
+        message = entry.get("message")
         if (entry.get("type") == "assistant" and not entry.get("isSidechain")
                 and isinstance(message, dict) and isinstance(message.get("usage"), dict)):
             usage = message["usage"]

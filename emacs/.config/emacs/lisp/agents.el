@@ -20,6 +20,10 @@
     "gr" #'herdr-overview-refresh
     "r" #'herdr-overview-rename
     "x" #'herdr-overview-kill
+    "n" #'herdr-overview-next-attention
+    "N" #'herdr-overview-previous-attention
+    "m" #'herdr-overview-toggle-reviewed
+    "R" #'herdr-restart-agents
     "q" #'quit-window))
 
 (defvar agents--mcp-launch-context nil
@@ -28,6 +32,27 @@
 It contains `:root', `:name', `:session', and `:pane'.  The values are passed
 to the MCP stdio process as environment variables, then re-injected as hidden
 MCP arguments by `bin/emacs-mcp'.")
+
+(defvar agents-instructions-file (expand-file-name "etc/agents.md" user-emacs-directory)
+  "Personal instructions, linked in as Claude's and Codex's user-level instructions.")
+
+(defvar agents-instructions-links '("~/.claude/CLAUDE.md" "~/.codex/AGENTS.md")
+  "Where `agents-link-instructions' links `agents-instructions-file'.")
+
+(defun agents-link-instructions ()
+  "Link each of `agents-instructions-links' to `agents-instructions-file'.
+A link whose directory doesn't exist is skipped.  A non-empty regular file is
+left alone with a warning."
+  (dolist (link (mapcar #'expand-file-name agents-instructions-links))
+    (cond
+     ((not (file-directory-p (file-name-directory link))))
+     ((equal (file-truename link) (file-truename agents-instructions-file)))
+     ((and (file-regular-p link) (not (file-symlink-p link))
+           (> (file-attribute-size (file-attributes link)) 0))
+      (display-warning 'agents (format "Not linking %s: it already has content" link)))
+     (t (make-symbolic-link agents-instructions-file link t)))))
+
+(agents-link-instructions)
 
 (defun agents--launch-shell-setup (kind)
   "Return shell setup needed before starting an agent of KIND."
@@ -180,7 +205,9 @@ state or a model-controlled tool argument."
   "aj" '(herdr-switch :wk "jump to agent")
   "ap" '(herdr-prompt :wk "prompt agent")
   "al" '(herdr-send-region :wk "send to focused agent")
+  "as" '(herdr-send-text :wk "send selected text to an agent")
   "av" '(herdr-overview :wk "view space tree")
+  "aR" '(herdr-restart-agents :wk "restart agents on an old CLI (SPC u: all)")
   "ad" '(ai-review-show-worktree-diff :wk "review diff")
   "aD" '(live-diff-follow-compact-in-split :wk "follow latest change below agent")
   "ac" '(ai-review-show-compilation :wk "compilation")
@@ -197,7 +224,8 @@ Anywhere else, keep C-l's usual move to the window on the right."
     (evil-window-right 1)))
 
 (with-eval-after-load 'evil
-  (define-key evil-visual-state-map (kbd "C-l") #'agents-send-region-or-window-right))
+  (define-key evil-visual-state-map (kbd "C-l") #'agents-send-region-or-window-right)
+  (define-key evil-visual-state-map (kbd "C-S-l") #'herdr-send-text))
 
 (defun agents-herdr-navigation-keys ()
   "Let C-h/j/k/l cross herdr panes in every Evil state, vim-tmux-navigator style.

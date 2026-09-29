@@ -380,6 +380,10 @@ onto a sibling reorders the children."
 (use-package tab-line
   :ensure nil
   :config
+  ;; tab-line uses this face only for the shown buffer in the selected window, so
+  ;; the split you are in stands out, in the theme's own accent color.
+  (custom-set-faces
+   '(tab-line-tab-current ((t :inherit (bold font-lock-keyword-face tab-line-tab) :overline t))))
   (global-tab-line-mode 1)
   (with-eval-after-load 'evil
     (evil-define-key 'motion 'global

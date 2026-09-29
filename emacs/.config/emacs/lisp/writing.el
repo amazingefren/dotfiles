@@ -5,10 +5,14 @@
   :commands (org-agenda org-capture)
   :custom
   (org-directory "~/org")
+  (org-export-backends '(ascii html icalendar latex md odt))
   (org-agenda-files '("~/org"))
   (org-agenda-file-regexp "\\`[^.][^.]*\\.org\\'")
   (org-agenda-window-setup 'current-window)
   (org-agenda-tags-column 0)
+  (org-agenda-time-grid '((daily today require-timed) () "" ""))
+  (org-agenda-current-time-string "← now ─────────")
+  (org-agenda-scheduled-leaders '("Scheduled: " "Late %2dd:  "))
   (org-agenda-prefix-format
    '((agenda . " %i %-12.12:c%?-12t% s")
      (todo . " %i %-12.12:c")
@@ -33,7 +37,9 @@
   (org-capture-templates
    '(("t" "Task" entry (file+headline "todo.org" "Tasks") "* TODO %?\n  %U")
      ("n" "Note" item (file+function "weekly.org" writing-weekly-notes) "%?")
-     ("m" "Meeting" entry (file+function "weekly.org" writing-weekly-meetings) "* %^{Meeting}\n  %U\n  - %?")))
+     ("m" "Meeting" entry (file+function "weekly.org" writing-weekly-meetings) "* %^{Meeting}\n  %U\n  - %?")
+     ("d" "Document" plain (file writing-org-doc-file) "#+TITLE: %(identity writing-org-doc-title)\n\n* "
+      :immediate-finish t :jump-to-captured t)))
   (org-insert-heading-respect-content t)
   (org-M-RET-may-split-line '((default . nil)))
   (org-startup-indented t)
@@ -131,7 +137,7 @@
                                    "-ps" "| ~~ |" "eventsFrom:today"
                                    (format "to:today+%d" writing-calendar-days)))
              (text (with-temp-buffer
-                     (insert "# -*- buffer-read-only: t -*-\n#+TITLE: Calendar\n#+CATEGORY: cal\n"
+                     (insert "# -*- buffer-read-only: t -*-\n#+TITLE: Calendar\n#+CATEGORY: meeting\n"
                              "# Copied from Calendar.app by writing-calendar-sync; edits are overwritten.\n\n")
                      (dolist (line lines)
                        (when (string-prefix-p "@@ " line)
@@ -140,8 +146,10 @@
                              (insert "* " title "\n" stamp "\n")
                              (dolist (r rest) (insert r "\n"))))))
                      (buffer-string))))
-        (unless (and (file-exists-p file)
-                     (equal text (with-temp-buffer (insert-file-contents file) (buffer-string))))
+        ;; An empty result is Calendar.app not syncing, not an empty month.
+        (unless (or (not (seq-some (lambda (l) (string-prefix-p "@@ " l)) lines))
+                    (and (file-exists-p file)
+                         (equal text (with-temp-buffer (insert-file-contents file) (buffer-string)))))
           (with-temp-file file (insert text))
           (when-let* ((buffer (find-buffer-visiting file)))
             (with-current-buffer buffer (revert-buffer t t t)))))
@@ -196,6 +204,30 @@
 (add-hook 'org-agenda-finalize-hook #'writing-agenda-style-someday)
 (add-hook 'org-agenda-finalize-hook #'org-modern-agenda 90)
 
+(defvar writing-agenda--refresh-timer nil)
+
+(defun writing-agenda-refresh-soon (&rest _)
+  "Rebuild the agendas on screen once Emacs is idle, so edits show without gr."
+  (unless (timerp writing-agenda--refresh-timer)
+    (setq writing-agenda--refresh-timer (run-with-idle-timer 0.3 nil #'writing-agenda--refresh))))
+
+(defun writing-agenda--refresh ()
+  (setq writing-agenda--refresh-timer nil)
+  (if (active-minibuffer-window)
+      (writing-agenda-refresh-soon)
+    (dolist (window (window-list-1 nil 'nomini 'visible))
+      (when (with-current-buffer (window-buffer window) (derived-mode-p 'org-agenda-mode))
+        (with-selected-window window (org-agenda-redo t))))))
+
+(defun writing-agenda-refresh-after-save ()
+  (when (derived-mode-p 'org-mode) (writing-agenda-refresh-soon)))
+
+(dolist (hook '(org-after-todo-state-change-hook org-after-tags-change-hook org-after-note-stored-hook))
+  (add-hook hook #'writing-agenda-refresh-soon))
+(add-hook 'after-save-hook #'writing-agenda-refresh-after-save)
+(advice-add 'org-add-planning-info :after #'writing-agenda-refresh-soon)
+(advice-add 'org-priority :after #'writing-agenda-refresh-soon)
+
 (defun writing-org--headings-p (beg end)
   "Non-nil if there is an Org heading between BEG and END."
   (save-excursion
@@ -204,7 +236,7 @@
 
 ;; `org-display-buffer-split' deletes other windows and splits into the herdr side window.
 (add-to-list 'display-buffer-alist
-             '("\\`\\(?: ?\\*\\(?:Agenda Commands\\|Org \\(?:Select\\|Note\\|todo\\|tags\\)\\)\\*\\|CAPTURE-\\)"
+             '("\\`\\(?: ?\\*\\(?:Agenda Commands\\|Org \\(?:Select\\|Note\\|todo\\|tags\\|Export Dispatcher\\)\\)\\*\\|CAPTURE-\\)"
                (display-buffer-reuse-window display-buffer-in-direction)
                (window . main) (direction . below) (window-height . 0.4)
                (body-function . writing-org-menu-tint)))
@@ -216,7 +248,11 @@
       (themes-popup-tint))))
 
 (use-package org-modern
-  :hook (org-mode . org-modern-mode))
+  :hook (org-mode . org-modern-mode)
+  :custom
+  ;; Berkeley Mono has only these arrows; the defaults for levels 3+ show as boxes.
+  (org-modern-fold-stars '(("▶" . "▼") ("▷" . "▽")))
+  (org-modern-cycle-stars t))
 
 (defconst writing-weekly-sections '("Notes" "Meetings")
   "The headings every week in weekly.org gets, in order.")
@@ -249,6 +285,32 @@
   (outline-up-heading 1)
   (org-fold-show-subtree)
   (recenter 0))
+
+(defvar writing-org-doc-title nil)
+
+(defun writing-org-doc-file ()
+  "Ask for a document title and return its new file in ~/org/docs/."
+  (setq writing-org-doc-title
+        (string-remove-suffix ".org" (string-trim (read-string "Document title: "))))
+  (let* ((slug (string-trim (replace-regexp-in-string "[^a-z0-9]+" "-" (downcase writing-org-doc-title)) "-" "-"))
+         (file (expand-file-name (concat slug ".org") (expand-file-name "docs" org-directory))))
+    (when (file-exists-p file)
+      (user-error "%s already exists; open it with SPC o f" (abbreviate-file-name file)))
+    (make-directory (file-name-directory file) t)
+    file))
+
+(defun writing-org-copy-markdown ()
+  "Copy the buffer, or the active region, as Markdown for pasting into a ticket."
+  (interactive)
+  (require 'ox-md)
+  (let ((md (org-export-as 'md nil nil t '(:with-toc nil :section-numbers nil))))
+    (setq md (replace-regexp-in-string "^\\( *[-+*]\\) +" "\\1 " md))
+    (setq md (replace-regexp-in-string "\n\\{3,\\}" "\n\n" md))
+    (kill-new (string-trim md))
+    (gui-set-selection 'CLIPBOARD (string-trim md))
+    (when (and (fboundp 'evil-visual-state-p) (evil-visual-state-p))
+      (evil-exit-visual-state))
+    (message "Copied as Markdown")))
 
 (defun writing-open-org-directory ()
   "Open the Org directory in Dired."
@@ -311,4 +373,5 @@
   "oo" '(writing-open-org-directory :wk "org directory")
   "of" '(writing-find-org-file :wk "org file")
   "ow" '(writing-weekly-open :wk "weekly notes")
+  "oy" '(writing-org-copy-markdown :wk "copy as markdown")
   "om" '(markdown-live-preview-mode :wk "markdown preview"))

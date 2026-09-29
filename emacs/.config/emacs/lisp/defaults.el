@@ -50,3 +50,15 @@
   (global-so-long-mode 1)
   (setq mouse-wheel-scroll-amount '(1 ((shift) . hscroll)))
   (setf (alist-get 'continuation fringe-indicator-alist) nil))
+
+(use-package hl-line
+  :ensure nil
+  :config
+  ;; Terminals move their cursor on their own, so a highlight there only flickers.
+  ;; The rest is the default: hidden buffers, the minibuffer, and cursor-face buffers.
+  (setq global-hl-line-buffers
+        '(not (or (derived-mode . ghostel-mode)
+                  (lambda (b) (buffer-local-value 'cursor-face-highlight-mode b))
+                  (lambda (b) (string-match-p "\\` " (buffer-name b)))
+                  minibufferp)))
+  (global-hl-line-mode 1))

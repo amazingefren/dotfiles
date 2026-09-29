@@ -9,6 +9,15 @@
          (xwidget-webkit-auto-adjust-size window))))
    nil frame))
 
+(defun browser-split-window (split &rest args)
+  "Call SPLIT with ARGS, then show another buffer in the new window if it shows WebKit.
+On macOS a WebKit view renders in one window only."
+  (let ((window (apply split args)))
+    (with-current-buffer (window-buffer window)
+      (when (derived-mode-p 'xwidget-webkit-mode)
+        (set-window-buffer window (other-buffer (current-buffer) t))))
+    window))
+
 (use-package xwidget
   :ensure nil
   :if (featurep 'xwidget-internal)
@@ -18,7 +27,8 @@
   (browse-url-secondary-browser-function #'browse-url-default-macosx-browser)
   (browse-url-handlers '(("\\`https?://\\([^/]+\\.\\)?github\\.com" . browse-url-default-macosx-browser))) ; GitHub needs your logged-in browser
   :config
-  (add-hook 'window-size-change-functions #'browser-resize-xwidgets))
+  (add-hook 'window-size-change-functions #'browser-resize-xwidgets)
+  (advice-add 'split-window :around #'browser-split-window))
 
 (use-package eww
   :ensure nil
@@ -56,7 +66,7 @@ URLs matching `browse-url-handlers' (GitHub) skip the question."
     (?x (browser-open url))
     (?b (browse-url-default-macosx-browser url))
     (?e (eww url))
-    (?c (kill-new url) (message "Copied %s" url))))
+    (?c (kill-new url) (gui-set-selection 'CLIPBOARD url) (message "Copied %s" url))))
 
 (defun browser-current-url ()
   "URL of the page in the current buffer, or the URL at point, or nil."
