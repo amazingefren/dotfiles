@@ -1224,7 +1224,7 @@ compact text view.  Switching buffers stops follow in this window."
 
 ;;;###autoload
 (defun live-diff-follow-in-split ()
-  "Open or close file follow below Herdr in the right side area."
+  "Open or close file follow in the right side area."
   (interactive)
   (let* ((root (live-diff--follow-root))
          (existing (gethash root live-diff--states))
@@ -1250,7 +1250,7 @@ compact text view.  Switching buffers stops follow in this window."
 
 ;;;###autoload
 (defun live-diff-follow-compact-in-split ()
-  "Open or close a compact, mode-free change view below Herdr."
+  "Open or close a compact, mode-free change view in the right side area."
   (interactive)
   (let* ((root (live-diff--follow-root))
          (git (live-diff--git-root-p root))

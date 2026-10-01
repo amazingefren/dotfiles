@@ -11,6 +11,8 @@
   :demand t
   :custom
   (herdr-config-file (expand-file-name "etc/herdr.toml" user-emacs-directory))
+  (herdr-edge-commands '((down . dwm-focus-next) (left . windmove-left)
+                         (right . windmove-right) (up . dwm-focus-previous)))
   :config
   (herdr-mode 1)
   (evil-set-initial-state 'herdr-overview-mode 'normal)
@@ -209,10 +211,10 @@ state or a model-controlled tool argument."
   "av" '(herdr-overview :wk "view space tree")
   "aR" '(herdr-restart-agents :wk "restart agents on an old CLI (SPC u: all)")
   "ad" '(ai-review-show-worktree-diff :wk "review diff")
-  "aD" '(live-diff-follow-compact-in-split :wk "follow latest change below agent")
+  "aD" '(live-diff-follow-compact-in-split :wk "follow latest change in right panel")
   "ac" '(ai-review-show-compilation :wk "compilation")
   "af" '(live-diff-toggle-file-follow :wk "follow AI edits in this window")
-  "aF" '(live-diff-follow-in-split :wk "follow AI edits below agent")
+  "aF" '(live-diff-follow-in-split :wk "follow AI edits in right panel")
   "ab" '(herdr-bind-session :wk "bind session"))
 
 (defun agents-send-region-or-window-right ()

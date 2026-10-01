@@ -234,7 +234,7 @@
     (goto-char beg)
     (re-search-forward org-outline-regexp-bol end t)))
 
-;; `org-display-buffer-split' deletes other windows and splits into the herdr side window.
+;; `org-display-buffer-split' deletes other windows.
 (add-to-list 'display-buffer-alist
              '("\\`\\(?: ?\\*\\(?:Agenda Commands\\|Org \\(?:Select\\|Note\\|todo\\|tags\\|Export Dispatcher\\)\\)\\*\\|CAPTURE-\\)"
                (display-buffer-reuse-window display-buffer-in-direction)

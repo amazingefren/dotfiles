@@ -5,6 +5,19 @@
   :config
   (winner-mode 1))
 
+(use-package dwm
+  :load-path "site-lisp/dwm"
+  :ensure nil
+  :demand t
+  :custom
+  (dwm-float-buffers '(derived-mode . magit-mode))
+  (dwm-view-buffers '(or "\\`\\*herdr: " "\\`\\*herdr overview" "\\`\\*lyra dashboard: "))
+  (switch-to-buffer-in-dedicated-window 'pop)
+  :bind ("s-<return>" . dwm-zoom)
+  :config
+  (setopt tab-line-exclude-buffers dwm-view-buffers)
+  (dwm-mode 1))
+
 (use-package olivetti
   :commands olivetti-mode)
 
@@ -18,8 +31,18 @@
 
 (repeat-mode 1)
 
+(defun windows-close-other-tabs ()
+  "Drop every buffer but the shown one from the selected window's tab line.
+The buffers stay open."
+  (interactive)
+  (set-window-prev-buffers nil nil)
+  (set-window-next-buffers nil nil)
+  (set-window-parameter nil 'tab-line-buffers nil)
+  (tab-line-force-update nil))
+
 (leader
   "q"  '(quit-window :wk "close / back")
+  "bo" '(windows-close-other-tabs :wk "close other tabs in split")
   "w"  '(:ignore t :wk "window")
   "w=" '(balance-windows :wk "balance")
   "w+" '(enlarge-window :wk "taller")

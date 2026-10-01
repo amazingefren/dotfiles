@@ -58,9 +58,10 @@ When nil, ask on first use and save the choice in `custom-file'."
   "Seconds between agent state polls while `herdr-mode' is on."
   :type 'number)
 
-(defcustom herdr-window-width 0.45
-  "Width of the agent side window, as a fraction of the frame."
-  :type 'number)
+(defcustom herdr-edge-commands
+  '((down . windmove-down) (left . windmove-left) (right . windmove-right) (up . windmove-up))
+  "Commands that `herdr-navigate-*' run at herdr's edge, keyed by direction."
+  :type '(alist :key-type symbol :value-type function))
 
 (defcustom herdr-notify t
   "Show a desktop notification when an agent needs attention."
@@ -650,7 +651,7 @@ that for a few seconds.  ATTEMPT counts the tries; ON-START runs on success."
   "A ghostel buffer running the full herdr client for SESSION.
 Return (BUFFER . FRESH), where FRESH is non-nil if the client was just started.
 The full client, unlike `herdr agent attach', forwards mouse clicks and drags
-to the pane, and gives the side window herdr's own tabs, shells, and agents."
+to the pane, and gives the window herdr's own tabs, shells, and agents."
   (let* ((bname (herdr--buffer-name session))
          (live (let ((b (get-buffer bname)))
                  (and b (get-buffer-process b) (process-live-p (get-buffer-process b)) b))))
@@ -701,9 +702,7 @@ DIRECTION is left, right, up, or down, as in vim-tmux-navigator."
          (edges (and pane (alist-get 'edges (herdr--run session "pane" "edges" "--pane" pane)))))
     (if (and edges (not (eq (alist-get direction edges) t)))
         (herdr--run session "pane" "focus" "--direction" (symbol-name direction) "--pane" pane)
-      (pcase direction
-        ('left (windmove-left)) ('right (windmove-right))
-        ('up (windmove-up)) ('down (windmove-down))))))
+      (call-interactively (alist-get direction herdr-edge-commands)))))
 
 (defun herdr-navigate-left () "Pane or window to the left." (interactive) (herdr--navigate 'left))
 (defun herdr-navigate-right () "Pane or window to the right." (interactive) (herdr--navigate 'right))
@@ -722,20 +721,16 @@ DIRECTION is left, right, up, or down, as in vim-tmux-navigator."
   "In a herdr client buffer, C-h/j/k/l move between herdr panes, then Emacs windows."
   :keymap herdr-client-mode-map)
 
-(defun herdr--side-window ()
-  (seq-find (lambda (w) (and (eq (window-parameter w 'window-side) 'right)
-                             (string-prefix-p "*herdr: " (buffer-name (window-buffer w)))))
+(defun herdr--window ()
+  "Return the selected frame's window showing a herdr client, or nil."
+  (seq-find (lambda (w) (string-prefix-p "*herdr: " (buffer-name (window-buffer w))))
             (window-list)))
 
 (defun herdr--display (session)
-  "Show SESSION's herdr client in the right side window and select it.
+  "Show SESSION's herdr client and select it.
 Return non-nil if the client was just started."
   (pcase-let ((`(,buffer . ,fresh) (herdr--client-buffer session)))
-    (select-window
-     (display-buffer buffer
-                     `((display-buffer-in-side-window)
-                       (side . right) (slot . 0)
-                       (window-width . ,herdr-window-width))))
+    (select-window (display-buffer buffer '(display-buffer-reuse-window)))
     fresh))
 
 (defun herdr--show (session pane)
@@ -757,8 +752,8 @@ Return non-nil if the client was just started."
 (defun herdr-toggle ()
   "Hide the herdr window if it is showing, else show this workspace's session."
   (interactive)
-  (if-let* ((w (herdr--side-window)))
-      (delete-window w)
+  (if-let* ((w (herdr--window)))
+      (quit-restore-window w 'bury)
     (herdr--display (herdr--session))))
 
 ;;;###autoload

@@ -407,8 +407,7 @@ SPC f f, SPC f g, new shells, agent sessions, and the tree follow it."
   (let ((dir (file-name-as-directory (file-truename dir))))
     (puthash (persp-current-name) dir workspace-roots)
     (setq default-directory dir)
-    (when (and (fboundp 'treemacs-current-visibility) (eq (treemacs-current-visibility) 'visible))
-      (save-selected-window (tree-show-root dir)))
+    (tree-show-root dir)
     (message "Workspace root: %s" (abbreviate-file-name dir))))
 
 (defun workspace-open-project (dir &optional name)

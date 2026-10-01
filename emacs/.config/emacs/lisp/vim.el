@@ -26,9 +26,12 @@
 
   ;; motion-state-map is inherited by normal state and by read-only buffers.
   (define-key evil-motion-state-map (kbd "C-h") #'evil-window-left)
-  (define-key evil-motion-state-map (kbd "C-j") #'evil-window-down)
-  (define-key evil-motion-state-map (kbd "C-k") #'evil-window-up)
+  (define-key evil-motion-state-map (kbd "C-j") #'dwm-focus-next)
+  (define-key evil-motion-state-map (kbd "C-k") #'dwm-focus-previous)
   (define-key evil-motion-state-map (kbd "C-l") #'evil-window-right)
+  ;; evil-visual-state-map's C-S-l, sending to agents, outranks this.
+  (define-key evil-motion-state-map (kbd "C-S-h") #'dwm-shrink-master)
+  (define-key evil-motion-state-map (kbd "C-S-l") #'dwm-grow-master)
   (global-set-key (kbd "C-<up>")    #'enlarge-window)
   (global-set-key (kbd "C-<down>")  #'shrink-window)
   (global-set-key (kbd "C-<left>")  #'enlarge-window-horizontally)
@@ -130,6 +133,9 @@
 (use-package evil-collection
   :pin melpa
   :after evil
+  :custom
+  (evil-collection-binding-overrides '((next-section-2 :enabled nil)
+                                       (prev-section-2 :enabled nil)))
   :config
   (evil-collection-init))
 

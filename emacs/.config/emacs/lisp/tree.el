@@ -1,53 +1,84 @@
-;;; tree.el --- file tree sidebar  -*- lexical-binding: t -*-
+;;; tree.el --- file tree sidebar and file manager  -*- lexical-binding: t -*-
 
-(use-package treemacs
-  :commands (treemacs treemacs-select-window treemacs-find-file)
+;; The nongnu build keeps extensions in a subfolder off load-path; MELPA's doesn't.
+(use-package dirvish
+  :pin melpa
+  :demand t
   :custom
-  (treemacs-width 32)
-  (treemacs-is-never-other-window nil)
-  (treemacs-follow-after-init t)
-  (treemacs-indentation 1)
-  (treemacs-show-hidden-files t)
-  (treemacs-git-mode 'simple)               ; not 'deferred: it throws timer errors when the tree is re-rooted
-  (treemacs-collapse-dirs 3)
+  (dired-listing-switches "-Al")
+  (dirvish-attributes '(nerd-icons subtree-state tree-vc-state file-size))
+  (dirvish-side-attributes '(nerd-icons subtree-state tree-vc-state))
+  (dirvish-side-window-parameters '((no-delete-other-windows . t)))
   :config
-  (treemacs-follow-mode 1)
-  (treemacs-filewatch-mode 1)
-  ;; No project-follow-mode: it re-roots the tree to the git root on every buffer switch.
-  (treemacs-fringe-indicator-mode 'always))
+  (require 'dirvish-vc)                     ; collects git state; loads only for its own attributes
+  (add-hook 'dirvish-find-entry-hook #'tree--display-file)
+  (dirvish-override-dired-mode 1)
+  (dirvish-side-follow-mode 1)
+  (with-eval-after-load 'evil
+    (evil-define-key 'normal dirvish-mode-map
+      (kbd "TAB") #'dirvish-subtree-toggle
+      "q"         #'dirvish-quit
+      "<"         #'tree-up
+      ">"         #'tree-down
+      "?"         #'dirvish-dispatch)))
 
-(use-package treemacs-evil
-  :after (treemacs evil))
+(dirvish-define-attribute tree-vc-state
+  "The version control state as the file name's color."
+  :when (and (symbolp (dirvish-prop :vc-backend)) (not (dirvish-prop :remote)))
+  (let ((ov (make-overlay f-beg f-end)))
+    (when-let* ((state (dirvish-attribute-cache f-name :vc-state))
+                (face (alist-get state dirvish-vc-state-face-alist)))
+      (overlay-put ov 'face face))
+    `(ov . ,ov)))
 
-(use-package treemacs-perspective
-  :after (treemacs perspective)
-  :config
-  (treemacs-set-scope-type 'Perspectives))
+(defvar tree--trail nil
+  "Deepest directory `tree-up' left, for `tree-down' to return to.")
 
-(use-package treemacs-magit
-  :after (treemacs magit))
-
-(defun tree-toggle ()
-  "Toggle the file tree. If it is visible but not focused, focus it."
+(defun tree-down ()
+  "Show the next directory down toward the one `tree-up' left.
+Without such a directory below this one, show the directory at point.
+Signals a `user-error' when point is not on a directory."
   (interactive)
-  (require 'treemacs)   ; only the entry commands autoload; the helpers below don't
-  (pcase (treemacs-current-visibility)
-    ('visible (if (eq (selected-window) (treemacs-get-local-window))
-                  (delete-window (treemacs-get-local-window))
-                (treemacs-select-window)))
-    (_ (tree-show-root (workspace-root)))))
+  (let ((here default-directory))
+    (if (and tree--trail
+             (file-in-directory-p tree--trail here)
+             (not (file-equal-p tree--trail here)))
+        (let ((next-step (car (split-string (file-relative-name tree--trail here) "/"))))
+          (dired-goto-file (expand-file-name next-step here))
+          (dired-find-file))
+      (unless (file-directory-p (dired-get-filename nil t))
+        (user-error "Not on a directory"))
+      (dired-find-file))))
 
 (defun tree-show-root (root)
-  "Make ROOT the only project in this workspace's tree and show it."
-  (let* ((root (directory-file-name (file-truename root)))   ; treemacs stores resolved paths
-         (name (file-name-nondirectory root)))
-    (treemacs-select-window)   ; creates the tree buffer (and its workspace) if needed
-    (dolist (p (treemacs-workspace->projects (treemacs-current-workspace)))
-      (unless (string= (treemacs-project->path p) root)
-        (treemacs-do-remove-project-from-workspace p 'ignore-last-project-restriction)))
-    (unless (treemacs-workspace->projects (treemacs-current-workspace))
-      (treemacs-do-add-project-to-workspace root name))))
+  "Show ROOT in the file tree when the tree is visible."
+  (when-let* ((win (dirvish-side--session-visible-p)))
+    (with-selected-window win
+      (dirvish--find-entry 'find-alternate-file root))))
+
+(defun tree-toggle ()
+  "Toggle the file tree, opening it at the workspace root.
+Focuses the tree when it is visible but not selected; closes it when selected."
+  (interactive)
+  (dirvish-side (workspace-root)))
+
+(defun tree-up ()
+  "Show the parent directory, remembering this one for `tree-down'."
+  (interactive)
+  (unless (and tree--trail (file-in-directory-p tree--trail default-directory))
+    (setq tree--trail default-directory))
+  (dired-up-directory))
+
+(defun tree--display-file (entry find-fn)
+  "Show file ENTRY from the tree in the window `display-buffer' picks.
+Handles only files FIND-FN would open in the tree's own window.
+Returns the file's buffer, or nil to leave ENTRY to dirvish."
+  (when-let* ((session (dirvish-curr))
+              ((eq (dv-type session) 'side))
+              ((memq find-fn '(find-file find-alternate-file)))
+              ((not (file-directory-p entry))))
+    (pop-to-buffer (find-file-noselect entry))))
 
 (leader
   "e" '(tree-toggle :wk "tree")
-  "E" '(treemacs-find-file :wk "reveal file in tree"))
+  "E" '(dirvish :wk "file manager"))
