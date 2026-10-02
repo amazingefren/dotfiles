@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 
 sys.dont_write_bytecode = True
 from codex_subagents import metadata as codex_session_metadata
@@ -113,7 +114,114 @@ TOOLS = [
     },
 ]
 
+BROWSER_PAGE = {"type": "string", "description": "Page ID such as p1. Defaults to the page this agent used last, or the only open page."}
+BROWSER_TARGET = {
+    "description": "A ref from the latest snapshot (e3), a CSS selector, or a locator object.",
+    "anyOf": [
+        {"type": "string"},
+        {"type": "object",
+         "properties": {"role": {"type": "string"}, "name": {"type": "string"}, "text": {"type": "string"},
+                        "label": {"type": "string"}, "placeholder": {"type": "string"}, "alt": {"type": "string"},
+                        "title": {"type": "string"}, "testid": {"type": "string"}, "css": {"type": "string"},
+                        "exact": {"type": "boolean"}},
+         "additionalProperties": False},
+    ],
+}
+BROWSER_NTH = {"type": "integer", "minimum": 0, "description": "Which match to use, visible matches first. Default 0."}
+
+BROWSER_TOOLS = [
+    {
+        "name": "emacs_browser_open",
+        "description": "Open a URL in an Emacs WebKit page shown beside the user's windows and wait for it to load. Without page, opens a new page; with page, navigates that page. Returns the page ID, URL and title. Use these browser tools instead of Playwright or other browser automation.",
+        "inputSchema": {"type": "object", "properties": {"url": {"type": "string"}, "page": BROWSER_PAGE,
+                                                         "hidden": {"type": "boolean", "description": "Open without showing a window."}},
+                        "required": ["url"], "additionalProperties": False},
+    },
+    {
+        "name": "emacs_browser_list",
+        "description": "List open WebKit pages with their IDs, URLs, titles, loading state and whether they are shown.",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+    {
+        "name": "emacs_browser_navigate",
+        "description": "Go back, forward or reload a page and wait for it to load.",
+        "inputSchema": {"type": "object", "properties": {"action": {"enum": ["back", "forward", "reload"]}, "page": BROWSER_PAGE},
+                        "required": ["action"], "additionalProperties": False},
+    },
+    {
+        "name": "emacs_browser_snapshot",
+        "description": "Read a page as an accessibility-style outline. Interactive elements get refs (e1, e2, ...) for emacs_browser_act; each snapshot replaces earlier refs.",
+        "inputSchema": {"type": "object", "properties": {
+            "page": BROWSER_PAGE,
+            "interactive": {"type": "boolean", "description": "List only interactive elements, flat."},
+            "selector": {"type": "string", "description": "CSS selector of the subtree to snapshot."},
+            "max_depth": {"type": "integer", "minimum": 0}},
+                        "additionalProperties": False},
+    },
+    {
+        "name": "emacs_browser_act",
+        "description": "Interact with a page element. Events are synthesized in JavaScript: click, dblclick, hover, focus, fill (replace text), clear, type (key by key; target optional, defaults to the focused element), press (key or combo such as Enter, Shift+Tab, Meta+a), select (options of a <select> by value or label), check, uncheck, scroll (by dx/dy pixels, default one screen down; target optional), scroll_into_view, upload (file paths into a file input). Set snapshot to get an interactive snapshot after the page settles.",
+        "inputSchema": {"type": "object", "properties": {
+            "action": {"enum": ["click", "dblclick", "hover", "focus", "fill", "clear", "type", "press", "select",
+                                "check", "uncheck", "scroll", "scroll_into_view", "upload"]},
+            "target": BROWSER_TARGET, "nth": BROWSER_NTH, "page": BROWSER_PAGE,
+            "text": {"type": "string"}, "key": {"type": "string"},
+            "values": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]},
+            "dx": {"type": "number"}, "dy": {"type": "number"},
+            "files": {"type": "array", "items": {"type": "string"}, "description": "Paths relative to the workspace."},
+            "snapshot": {"type": "boolean"}},
+                        "required": ["action"], "additionalProperties": False},
+    },
+    {
+        "name": "emacs_browser_get",
+        "description": "Read from a page: url, title, text (innerText), html (outerHTML), value, attr (name), count (of target matches), box, state (visible, enabled, checked, focused, editable) or styles (computed, names). Without target, text and html read the whole page.",
+        "inputSchema": {"type": "object", "properties": {
+            "what": {"enum": ["url", "title", "text", "html", "value", "attr", "count", "box", "state", "styles"]},
+            "target": BROWSER_TARGET, "nth": BROWSER_NTH, "page": BROWSER_PAGE,
+            "name": {"type": "string"}, "names": {"type": "array", "items": {"type": "string"}},
+            "max_chars": {"type": "integer", "minimum": 1}},
+                        "required": ["what"], "additionalProperties": False},
+    },
+    {
+        "name": "emacs_browser_eval",
+        "description": "Evaluate JavaScript in the page's global scope and return the last expression's value as JSON. Promises are awaited.",
+        "inputSchema": {"type": "object", "properties": {"script": {"type": "string"}, "page": BROWSER_PAGE},
+                        "required": ["script"], "additionalProperties": False},
+    },
+    {
+        "name": "emacs_browser_wait",
+        "description": "Wait until a condition holds: target in state (visible by default, hidden, attached, detached), text on the page (state hidden waits for it to go), url_contains, a JavaScript function expression that becomes truthy, or load_state (interactive or complete, the default when nothing else is given).",
+        "inputSchema": {"type": "object", "properties": {
+            "target": BROWSER_TARGET, "page": BROWSER_PAGE,
+            "state": {"enum": ["visible", "hidden", "attached", "detached"]},
+            "text": {"type": "string"}, "url_contains": {"type": "string"}, "function": {"type": "string"},
+            "load_state": {"enum": ["interactive", "complete"]},
+            "timeout_ms": {"type": "integer", "minimum": 0, "maximum": 120000, "default": 10000}},
+                        "additionalProperties": False},
+    },
+    {
+        "name": "emacs_browser_console",
+        "description": "Read console messages, uncaught errors and dialogs (alert, confirm accepted, prompt answered with its default) recorded in a page. Messages logged in the first moments of a load can be missed.",
+        "inputSchema": {"type": "object", "properties": {"page": BROWSER_PAGE,
+                                                         "since": {"type": "integer", "minimum": 0, "description": "Skip entries before this index."},
+                                                         "clear": {"type": "boolean"}},
+                        "additionalProperties": False},
+    },
+    {
+        "name": "emacs_browser_screenshot",
+        "description": "Show a page and capture its window as a PNG image. Needs Screen Recording permission for Emacs.",
+        "inputSchema": {"type": "object", "properties": {"page": BROWSER_PAGE}, "additionalProperties": False},
+    },
+    {
+        "name": "emacs_browser_close",
+        "description": "Close a page.",
+        "inputSchema": {"type": "object", "properties": {"page": BROWSER_PAGE}, "additionalProperties": False},
+    },
+]
+TOOLS.extend(BROWSER_TOOLS)
+
 TOOL_NAMES = frozenset(tool["name"] for tool in TOOLS)
+BROWSER_REQUEST_TIMEOUT = 180
 
 
 def emacs_call(method, arguments):
@@ -169,6 +277,30 @@ def register_codex_thread():
         pass
 
 
+def settle(result):
+    """Return RESULT, or the outcome of the browser request it names as pending.
+
+    Raises RuntimeError for an error result or a request that outlives
+    BROWSER_REQUEST_TIMEOUT seconds."""
+    deadline = time.monotonic() + BROWSER_REQUEST_TIMEOUT
+    while "pending" in result and "error" not in result:
+        if time.monotonic() > deadline:
+            raise RuntimeError("Browser request %s did not finish within %ss" % (result["pending"], BROWSER_REQUEST_TIMEOUT))
+        time.sleep(0.05)
+        result = emacs_call("browser_result", {"request": result["pending"]})
+    if "error" in result:
+        raise RuntimeError(result["error"])
+    return result
+
+
+def image_content(path):
+    """Return MCP image content for the PNG at PATH and delete the file."""
+    with open(path, "rb") as image:
+        data = base64.b64encode(image.read()).decode()
+    os.remove(path)
+    return {"type": "image", "data": data, "mimeType": "image/png"}
+
+
 def response(request_id, result=None, error=None):
     message = {"jsonrpc": "2.0", "id": request_id}
     if error:
@@ -186,7 +318,7 @@ def handle(message):
         return
     if method == "initialize":
         register_codex_thread()
-        response(request_id, {"protocolVersion": "2025-06-18", "capabilities": {"tools": {}}, "serverInfo": {"name": "emacs", "version": "0.3"}, "instructions": "Use these tools when live Emacs state is useful: visible buffers, selection, diagnostics, symbols, xref, and documentation. Emacs edit and create tools save through live buffers and reject dirty or stale conflicts. The user's live diff follower observes file changes independently of MCP tool use."})
+        response(request_id, {"protocolVersion": "2025-06-18", "capabilities": {"tools": {}}, "serverInfo": {"name": "emacs", "version": "0.3"}, "instructions": "Use these tools when live Emacs state is useful: visible buffers, selection, diagnostics, symbols, xref, and documentation. Emacs edit and create tools save through live buffers and reject dirty or stale conflicts. The user's live diff follower observes file changes independently of MCP tool use. For web pages, use the emacs_browser_* tools instead of Playwright or other browser automation: open a page, snapshot it for element refs, then act on refs."})
     elif method == "tools/list":
         response(request_id, {"tools": TOOLS})
     elif method == "tools/call":
@@ -195,9 +327,11 @@ def handle(message):
             response(request_id, error={"code": -32602, "message": "Unknown tool"})
             return
         try:
-            result = emacs_call(tool.removeprefix("emacs_"), message.get("params", {}).get("arguments", {}))
-            if "error" in result:
-                raise RuntimeError(result["error"])
+            result = settle(emacs_call(tool.removeprefix("emacs_"), message.get("params", {}).get("arguments", {})))
+            if "image_path" in result:
+                response(request_id, {"content": [image_content(result.pop("image_path")),
+                                                  {"type": "text", "text": json.dumps(result, indent=2)}]})
+                return
             response(request_id, {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]})
         except Exception as exc:
             response(request_id, {"content": [{"type": "text", "text": str(exc)}], "isError": True})

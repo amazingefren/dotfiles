@@ -387,47 +387,6 @@ Reject dirty or stale buffers and ambiguous matches before changing anything."
           (start_line . ,start)
           (text . ,(buffer-substring-no-properties begin (if end (point) (point-max)))))))))
 
-(defun emacs-mcp--browser-buffers ()
-  (seq-filter (lambda (buffer)
-                (with-current-buffer buffer
-                  (derived-mode-p 'eww-mode 'xwidget-webkit-mode)))
-              (buffer-list)))
-
-(defun emacs-mcp--browser-data (buffer)
-  (with-current-buffer buffer
-    `((buffer . ,(buffer-name))
-      (mode . ,(symbol-name major-mode))
-      (url . ,(and (fboundp 'browser-current-url) (ignore-errors (browser-current-url)))))))
-
-(defun emacs-mcp--browser-context (_arguments)
-  `((browsers . ,(vconcat (mapcar #'emacs-mcp--browser-data (emacs-mcp--browser-buffers))))))
-
-(defun emacs-mcp--browser-open (arguments)
-  (let ((url (gethash "url" arguments)))
-    (unless (string-match-p "\\`https?://" (or url ""))
-      (user-error "A HTTP(S) URL is required"))
-    (unless (fboundp 'browser-open)
-      (user-error "The Emacs browser module is not loaded"))
-    (browser-open url)
-    `((opened . t) (url . ,url))))
-
-(defun emacs-mcp--browser-buffer (arguments)
-  (let* ((name (gethash "buffer" arguments))
-         (buffer (or (and name (get-buffer name))
-                     (car (emacs-mcp--browser-buffers)))))
-    (unless buffer (user-error "No Emacs browser buffer is open"))
-    (with-current-buffer buffer
-      (unless (derived-mode-p 'eww-mode)
-        (user-error "Only EWW pages expose readable text; this is %s" major-mode)))
-    buffer))
-
-(defun emacs-mcp--browser-read (arguments)
-  (let ((buffer (emacs-mcp--browser-buffer arguments)))
-    (with-current-buffer buffer
-      `((buffer . ,(buffer-name))
-        (url . ,(browser-current-url))
-        (text . ,(buffer-substring-no-properties (point-min) (point-max)))))))
-
 (defun emacs-mcp--target-buffer (arguments)
   (if (gethash "path" arguments)
       (find-file-noselect (emacs-mcp--file-path arguments))
@@ -499,9 +458,8 @@ Reject dirty or stale buffers and ambiguous matches before changing anything."
                   ("edit_file" (emacs-mcp--edit-file arguments))
                   ("create_file" (emacs-mcp--create-file arguments))
                   ("read_file" (emacs-mcp--read-file arguments))
-                  ("browser_context" (emacs-mcp--browser-context arguments))
-                  ("browser_open" (emacs-mcp--browser-open arguments))
-                  ("browser_read" (emacs-mcp--browser-read arguments))
+                  ((pred (string-prefix-p "browser_"))
+                   (webkit-agent-mcp-dispatch method arguments))
                   ("diagnostics" (emacs-mcp--diagnostics arguments))
                   ("symbols" (emacs-mcp--symbols arguments))
                   ("selection_context" (emacs-ai-intelligence-selection-context
@@ -518,8 +476,6 @@ Reject dirty or stale buffers and ambiguous matches before changing anything."
                                        (emacs-mcp--target-buffer arguments) arguments))
                   ("documentation_at_point" (emacs-ai-intelligence-documentation-at-point
                                               (emacs-mcp--target-buffer arguments) arguments))
-                  ("browser_page" (emacs-ai-intelligence-eww-context
-                                    (emacs-mcp--browser-buffer arguments) arguments))
                   ("show_worktree_diff" (emacs-mcp--show-worktree-diff arguments))
                   ("compilation_context" (ai-review-compilation-context arguments))
                   ("compilation_read" (ai-review-read-compilation arguments))

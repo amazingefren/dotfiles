@@ -6,7 +6,6 @@
 (require 'project)
 (require 'subr-x)
 (require 'xref)
-(require 'eww)
 
 (defvar emacs-mcp--request-root)
 
@@ -26,11 +25,6 @@
 
 (defcustom emacs-ai-intelligence-max-xref-results 100
   "Largest definition or reference list returned by an xref request."
-  :type 'integer
-  :group 'emacs-ai-intelligence)
-
-(defcustom emacs-ai-intelligence-max-browser-links 100
-  "Largest EWW link list returned by `emacs-ai-intelligence-eww-context'."
   :type 'integer
   :group 'emacs-ai-intelligence)
 
@@ -354,52 +348,6 @@ waits for, or writes, an asynchronous response."
                     (source . ,(emacs-ai-intelligence--json-null
                                  (cond (builtin "emacs") (eldoc "eldoc"))))
                     (truncated . ,(emacs-ai-intelligence--json-bool (cdr limited))))))))))
-
-(defun emacs-ai-intelligence--eww-links (limit)
-  "Return up to LIMIT unique links and an accurate truncation flag.
-The return value is a cons whose car is the links and cdr says whether one or
-more additional unique links were present."
-  (let ((position (point-min)) links
-        (seen (make-hash-table :test #'equal)))
-    (while (and (< position (point-max)) (<= (length links) limit))
-      (let* ((url (get-text-property position 'shr-url))
-             (next (next-single-property-change position 'shr-url nil (point-max))))
-        (when (and (stringp url) (not (gethash url seen)))
-          (puthash url t seen)
-          (let ((label (string-trim
-                        (replace-regexp-in-string
-                         "[[:space:]\\n]+" " "
-                         (buffer-substring-no-properties position next)))))
-            (push `((text . ,label) (url . ,url)) links)))
-        (setq position (if (= position next) (1+ position) next))))
-    (setq links (nreverse links))
-    (cons (cl-subseq links 0 (min limit (length links))) (> (length links) limit))))
-
-(defun emacs-ai-intelligence-eww-context (buffer &optional arguments)
-  "Return readable text and links from EWW BUFFER.
-ARGUMENTS can contain `max_characters' and `max_links'.  Xwidget buffers are
-intentionally excluded: their rendered contents are not reliably readable by
-Emacs without browser automation."
-  (with-current-buffer buffer
-    (unless (derived-mode-p 'eww-mode)
-      (user-error "Only EWW buffers expose readable browser context"))
-    (let* ((text-limit (emacs-ai-intelligence--positive-integer
-                        (emacs-ai-intelligence--argument arguments "max_characters")
-                        emacs-ai-intelligence-max-context-characters))
-           (link-limit (emacs-ai-intelligence--positive-integer
-                        (emacs-ai-intelligence--argument arguments "max_links")
-                        emacs-ai-intelligence-max-browser-links))
-           (limited (emacs-ai-intelligence--limit-string
-                     (buffer-substring-no-properties (point-min) (point-max)) text-limit))
-           (link-result (emacs-ai-intelligence--eww-links link-limit))
-           (links (car link-result)))
-      `((buffer . ,(buffer-name))
-        (url . ,(emacs-ai-intelligence--json-null (plist-get eww-data :url)) )
-        (title . ,(emacs-ai-intelligence--json-null (plist-get eww-data :title)) )
-        (text . ,(car limited))
-        (text_truncated . ,(emacs-ai-intelligence--json-bool (cdr limited)) )
-        (links . ,(vconcat links))
-        (links_truncated . ,(emacs-ai-intelligence--json-bool (cdr link-result)))))))
 
 (provide 'ai-intelligence)
 ;;; ai-intelligence.el ends here

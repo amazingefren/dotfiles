@@ -30,6 +30,11 @@ On macOS a WebKit view renders in one window only."
   (add-hook 'window-size-change-functions #'browser-resize-xwidgets)
   (advice-add 'split-window :around #'browser-split-window))
 
+(use-package webkit-agent-mcp
+  :load-path "site-lisp/webkit-agent"
+  :ensure nil
+  :commands (webkit-agent-mcp-dispatch))
+
 (use-package eww
   :ensure nil
   :commands (eww)

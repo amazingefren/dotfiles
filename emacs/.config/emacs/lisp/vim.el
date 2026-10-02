@@ -82,10 +82,10 @@
   (defun vim-paste-from-system ()
     "Paste the system clipboard, leaving vim's registers alone."
     (interactive)
-    (let ((text (gui-get-selection 'CLIPBOARD 'UTF8_STRING)))
+    (let ((text (gui-get-selection 'CLIPBOARD)))   ; NS returns "" for the UTF8_STRING type
       (unless text (user-error "The system clipboard is empty"))
-      (cond ((and (derived-mode-p 'ghostel-mode) (fboundp 'ghostel--paste-text))
-             (ghostel--paste-text (substring-no-properties text)))
+      (cond ((derived-mode-p 'ghostel-mode)
+             (ghostel-paste-string (substring-no-properties text)))
             ((and (bound-and-true-p evil-local-mode) (evil-visual-state-p))
              (evil-visual-paste 1 ?+))
             ((and (bound-and-true-p evil-local-mode) (memq evil-state '(normal motion)))
