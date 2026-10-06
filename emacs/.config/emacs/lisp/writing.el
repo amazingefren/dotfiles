@@ -127,33 +127,49 @@
         (format "<%s>" (m 1)))))))
 
 (defun writing-calendar-sync ()
-  "Copy the next `writing-calendar-days' of `writing-calendar-name' into calendar.org."
+  "Copy the next `writing-calendar-days' of `writing-calendar-name' into calendar.org.
+Runs icalBuddy asynchronously and writes the file when it exits."
   (interactive)
-  (condition-case err
-      (let* ((file (expand-file-name "calendar.org" org-directory))
-             (lines (process-lines "icalBuddy" "-ic" writing-calendar-name "-nc" "-nrd"
-                                   "-b" "@@ " "-df" "%Y-%m-%d" "-tf" "%H:%M"
-                                   "-iep" "title,datetime,location" "-po" "title,datetime,location"
-                                   "-ps" "| ~~ |" "eventsFrom:today"
-                                   (format "to:today+%d" writing-calendar-days)))
-             (text (with-temp-buffer
-                     (insert "# -*- buffer-read-only: t -*-\n#+TITLE: Calendar\n#+CATEGORY: meeting\n"
-                             "# Copied from Calendar.app by writing-calendar-sync; edits are overwritten.\n\n")
-                     (dolist (line lines)
-                       (when (string-prefix-p "@@ " line)
-                         (pcase-let ((`(,title ,when . ,rest) (split-string (substring line 3) " ~~ ")))
-                           (when-let* ((stamp (and when (writing-calendar--timestamp when))))
-                             (insert "* " title "\n" stamp "\n")
-                             (dolist (r rest) (insert r "\n"))))))
-                     (buffer-string))))
-        ;; An empty result is Calendar.app not syncing, not an empty month.
-        (unless (or (not (seq-some (lambda (l) (string-prefix-p "@@ " l)) lines))
-                    (and (file-exists-p file)
-                         (equal text (with-temp-buffer (insert-file-contents file) (buffer-string)))))
-          (with-temp-file file (insert text))
-          (when-let* ((buffer (find-buffer-visiting file)))
-            (with-current-buffer buffer (revert-buffer t t t)))))
-    (error (message "Calendar sync failed: %s" (error-message-string err)))))
+  (let ((output (generate-new-buffer " *icalBuddy*")))
+    (make-process
+     :name "icalBuddy"
+     :buffer output
+     :noquery t
+     :command (list "icalBuddy" "-ic" writing-calendar-name "-nc" "-nrd"
+                    "-b" "@@ " "-df" "%Y-%m-%d" "-tf" "%H:%M"
+                    "-iep" "title,datetime,location" "-po" "title,datetime,location"
+                    "-ps" "| ~~ |" "eventsFrom:today"
+                    (format "to:today+%d" writing-calendar-days))
+     :sentinel (lambda (process _event)
+                 (unless (process-live-p process)
+                   (unwind-protect
+                       (if (zerop (process-exit-status process))
+                           (writing-calendar--write
+                            (split-string (with-current-buffer output (buffer-string)) "\n" t))
+                         (message "Calendar sync failed: icalBuddy exited with %d"
+                                  (process-exit-status process)))
+                     (kill-buffer output)))))))
+
+(defun writing-calendar--write (lines)
+  "Write icalBuddy output LINES to calendar.org when they differ from it."
+  (let* ((file (expand-file-name "calendar.org" org-directory))
+         (text (with-temp-buffer
+                 (insert "# -*- buffer-read-only: t -*-\n#+TITLE: Calendar\n#+CATEGORY: meeting\n"
+                         "# Copied from Calendar.app by writing-calendar-sync; edits are overwritten.\n\n")
+                 (dolist (line lines)
+                   (when (string-prefix-p "@@ " line)
+                     (pcase-let ((`(,title ,when . ,rest) (split-string (substring line 3) " ~~ ")))
+                       (when-let* ((stamp (and when (writing-calendar--timestamp when))))
+                         (insert "* " title "\n" stamp "\n")
+                         (dolist (r rest) (insert r "\n"))))))
+                 (buffer-string))))
+    ;; An empty result is Calendar.app not syncing, not an empty month.
+    (unless (or (not (seq-some (lambda (l) (string-prefix-p "@@ " l)) lines))
+                (and (file-exists-p file)
+                     (equal text (with-temp-buffer (insert-file-contents file) (buffer-string)))))
+      (with-temp-file file (insert text))
+      (when-let* ((buffer (find-buffer-visiting file)))
+        (with-current-buffer buffer (revert-buffer t t t))))))
 
 (defvar writing-calendar-timer nil)
 (when (timerp writing-calendar-timer) (cancel-timer writing-calendar-timer))

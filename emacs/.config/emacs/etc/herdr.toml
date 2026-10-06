@@ -29,7 +29,7 @@ focus_agent = "prefix+alt+1..9"
 
 [ui]
 prompt_new_workspace_name = true
-hide_tab_bar_when_single_tab = true
+hide_tab_bar_when_single_tab = false
 show_agent_labels_on_pane_borders = true
 sidebar_start_collapsed = true
 sidebar_collapsed_mode = "hidden"

@@ -1,4 +1,4 @@
-;;; vim.el --- evil (vim emulation) and the SPC leader key  -*- lexical-binding: t -*-
+;;; vim.el --- evil (vim emulation) and the SPC and C-a leader keys  -*- lexical-binding: t -*-
 
 (use-package evil
   :pin melpa                          ; GNU ELPA's 1.15.0 breaks on Emacs 31
@@ -165,7 +165,15 @@
   (general-create-definer leader
     :states '(normal visual motion)
     :keymaps 'override
-    :prefix "SPC")
+    :prefix "SPC"
+    :prefix-command 'leader-command
+    :prefix-map 'leader-map)
+
+  (defun vim-leader-outside-terminals (_binding)
+    "Return `leader-map', or nil in Ghostel buffers, which send C-a to the terminal."
+    (unless (derived-mode-p 'ghostel-mode) leader-map))
+  (define-key general-override-mode-map (kbd "C-a")
+              '(menu-item "" leader-map :filter vim-leader-outside-terminals))
 
   (define-advice evil-quit-all (:around (orig &optional bang) vim-confirm-quit)
     (if (and bang (not (yes-or-no-p "Quit Emacs and discard unsaved changes? ")))

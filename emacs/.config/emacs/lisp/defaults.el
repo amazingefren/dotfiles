@@ -13,6 +13,7 @@
               bidi-paragraph-direction 'left-to-right
               cursor-in-non-selected-windows nil)
 (setq bidi-inhibit-bpa t
+      inhibit-compacting-font-caches t
       redisplay-skip-fontification-on-input t
       highlight-nonselected-windows nil
       ffap-machine-p-known 'reject)
@@ -38,17 +39,19 @@
   (scroll-margin 4)
   (scroll-conservatively 101)
   (enable-recursive-minibuffers t)
+  (fast-but-imprecise-scrolling t)
   (read-process-output-max (* 4 1024 1024))
   (window-resize-pixelwise t)
   (frame-title-format "%b")
   (find-file-visit-truename t)
   (vc-follow-symlinks t)
   (confirm-kill-emacs #'yes-or-no-p)
+  (mouse-wheel-scroll-amount '(1 ((shift) . hscroll)))
+  (show-paren-delay 0.05)
   :config
   (column-number-mode 1)
   (global-auto-revert-mode 1)
   (global-so-long-mode 1)
-  (setq mouse-wheel-scroll-amount '(1 ((shift) . hscroll)))
   (setf (alist-get 'continuation fringe-indicator-alist) nil))
 
 (use-package hl-line

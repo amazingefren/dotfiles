@@ -5,7 +5,7 @@
 (add-hook 'emacs-startup-hook
           (lambda ()
             (setq gc-cons-threshold (* 128 1024 1024))
-            (run-with-idle-timer 4 t #'garbage-collect)))
+            (run-with-idle-timer 15 t #'garbage-collect)))
 
 (require 'xdg)
 (startup-redirect-eln-cache (expand-file-name "emacs/eln-cache/" (xdg-cache-home)))
