@@ -162,12 +162,14 @@
 (use-package general
   :demand t
   :config
-  (general-create-definer leader
-    :states '(normal visual motion)
-    :keymaps 'override
-    :prefix "SPC"
-    :prefix-command 'leader-command
-    :prefix-map 'leader-map)
+  ;; The `leader' calls below need the macro at compile time.
+  (eval-and-compile
+    (general-create-definer leader
+      :states '(normal visual motion)
+      :keymaps 'override
+      :prefix "SPC"
+      :prefix-command 'leader-command
+      :prefix-map 'leader-map))
 
   (defun vim-leader-outside-terminals (_binding)
     "Return `leader-map', or nil in Ghostel buffers, which send C-a to the terminal."

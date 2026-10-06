@@ -1,0 +1,15 @@
+# Language servers for Emacs's Eglot. A project's mise.toml overrides these.
+# Install or update with SPC l i, or `mise install`.
+
+[tools]
+"go:golang.org/x/tools/gopls" = "latest"
+lua-language-server = "latest"
+"npm:bash-language-server" = "latest"
+"npm:intelephense" = "latest"
+"npm:typescript-language-server" = "latest"
+"npm:vscode-langservers-extracted" = "latest"
+# 3.x needs a TypeScript plugin bridge that Eglot lacks.
+"npm:@vue/language-server" = "2.2"
+"pipx:basedpyright" = "latest"
+rust-analyzer = "latest"
+shellcheck = "latest"

@@ -6,9 +6,6 @@
 (defvar feeds-xwidget-buffer nil
   "The single embedded browser buffer used for feed entries.")
 
-(defvar feeds-update-timer nil
-  "Timer that keeps Elfeed synchronized with Yarr.")
-
 (defun feeds-refresh ()
   "Refresh feeds when no Elfeed curl requests are in progress."
   (interactive)
@@ -16,6 +13,15 @@
              (zerop elfeed-curl-queue-active)
              (null elfeed-curl-queue))
     (elfeed-update)))
+
+(defun feeds--parse-json-natively (orig &rest args)
+  "Call ORIG with `json-read' bound to the native JSON parser.
+The parser returns what `json-read' does with its default settings."
+  (cl-letf (((symbol-function 'json-read)
+             (lambda ()
+               (json-parse-buffer :object-type 'alist :array-type 'array
+                                  :null-object nil :false-object :json-false))))
+    (apply orig args)))
 
 (defun feeds-open-in-split (url &optional _new-window)
   "Show URL in the feed xwidget, reusing its existing WebKit session.
@@ -118,9 +124,8 @@ browser instead of creating more xwidget buffers and windows."
   (elfeed-protocol-fever-update-unread-only t)
   :config
   (elfeed-protocol-enable)
-  (when (timerp feeds-update-timer)
-    (cancel-timer feeds-update-timer))
-  (setq feeds-update-timer (run-at-time 0 (* 5 60) #'feeds-refresh)))
+  ;; json.el's `json-read' allocates enough for several GCs per sync.
+  (advice-add 'elfeed-curl--call-callback :around #'feeds--parse-json-natively))
 
 ;; Yarr folders arrive as tags via Fever.
 (defvar feeds-filters

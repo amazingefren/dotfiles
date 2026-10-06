@@ -14,6 +14,15 @@
 (setq custom-file (expand-file-name "emacs/custom.el" (xdg-cache-home)))
 (load custom-file 'noerror 'nomessage)
 
+(setq load-prefer-newer t)
+
+(use-package compile-on-load
+  :load-path "site-lisp/compile-on-load"
+  :ensure nil
+  :demand t
+  :config
+  (compile-on-load-mode 1))
+
 ;; lisp/ is deliberately not on load-path, so vim.el or git.el can't shadow a package.
 (dolist (file '("defaults" "packages" "environment" "session" "security" "editing" "op"
                 "themes" "vim" "pickers" "workspaces" "browser" "writing" "lang"

@@ -5,18 +5,22 @@
   :pin melpa
   :demand t
   :custom
-  (dired-listing-switches "-Al")
+  (dired-listing-switches "-Al --group-directories-first")
   (dirvish-attributes '(nerd-icons subtree-state tree-vc-state file-size))
   (dirvish-side-attributes '(nerd-icons subtree-state tree-vc-state))
   (dirvish-side-window-parameters '((no-delete-other-windows . t)))
+  (insert-directory-program "gls")          ; BSD ls lacks --group-directories-first
   :config
   (require 'dirvish-vc)                     ; collects git state; loads only for its own attributes
+  (setf (alist-get 'ignored dirvish-vc-state-face-alist) 'shadow)
   (add-hook 'dirvish-find-entry-hook #'tree--display-file)
   (dirvish-override-dired-mode 1)
   (dirvish-side-follow-mode 1)
   (with-eval-after-load 'evil
     (evil-define-key 'normal dirvish-mode-map
-      (kbd "TAB") #'dirvish-subtree-toggle
+      (kbd "TAB") #'tree-toggle-or-open
+      (kbd "<backtab>") #'dirvish-subtree-clear
+      "a"         #'dired-create-empty-file
       "q"         #'dirvish-quit
       "<"         #'tree-up
       ">"         #'tree-down
@@ -61,6 +65,14 @@ Signals a `user-error' when point is not on a directory."
 Focuses the tree when it is visible but not selected; closes it when selected."
   (interactive)
   (dirvish-side (workspace-root)))
+
+(defun tree-toggle-or-open ()
+  "Toggle the subtree of the directory at point, or open the file at point."
+  (interactive)
+  (let ((entry (dired-get-filename nil t)))
+    (if (and entry (not (file-directory-p entry)))
+        (dired-find-file)
+      (dirvish-subtree-toggle))))
 
 (defun tree-up ()
   "Show the parent directory, remembering this one for `tree-down'."

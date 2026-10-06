@@ -66,6 +66,8 @@
   "A block header for the agenda that looks like a day named NAME."
   (lambda () (concat (propertize name 'face 'org-agenda-date) "\n")))
 
+(eval-when-compile (require 'org-agenda))
+
 (defun writing-someday-toggle ()
   "Toggle the :someday: tag on the entry at point, in an Org file or the agenda."
   (interactive)
