@@ -25,8 +25,8 @@
 
 ;; lisp/ is deliberately not on load-path, so vim.el or git.el can't shadow a package.
 (dolist (file '("defaults" "packages" "environment" "session" "security" "editing" "op"
-                "themes" "vim" "pickers" "workspaces" "browser" "writing" "lang"
-                "git" "feeds" "tree" "terminal" "windows" "music" "ai-review" "ai-intelligence" "laya" "mcp" "agents" "home"))
+                "themes" "vim" "pickers" "workspaces" "chrome" "browser" "writing" "lang"
+                "git" "feeds" "tree" "terminal" "windows" "music" "ai-review" "ai-intelligence" "decisions" "mcp" "agents" "home"))
   (load (expand-file-name (concat "lisp/" file) user-emacs-directory) nil 'nomessage))
 
 ;; private/ is gitignored: proprietary packages that must not reach the public repo.

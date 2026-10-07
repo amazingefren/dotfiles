@@ -1,0 +1,102 @@
+--- a/lisp/xwidget.el
++++ b/lisp/xwidget.el
+@@ -114,6 +114,14 @@
+ buffers for this setting to take effect after setting it to nil."
+   :type '(choice (const :tag "Do not store cookies" nil) file)
+   :version "29.1")
++
++(defcustom xwidget-webkit-user-agent nil
++  "User agent for new macOS WebKit sessions.
++Nil uses WebKit's native default.  A string overrides it."
++  :type '(choice (const :tag "WebKit default" nil) string)
++  :group 'xwidget-webkit)
++
++(declare-function xwidget-webkit-set-user-agent "xwidget.c" (xwidget user-agent))
+ 
+ ;;;###autoload
+ (defun xwidget-webkit-browse-url (url &optional new-session)
+@@ -844,6 +852,8 @@
+                   (xwidget-window-inside-pixel-width (selected-window))
+                   (xwidget-window-inside-pixel-height (selected-window))
+                   nil current-session)))
++      (when (fboundp 'xwidget-webkit-set-user-agent)
++        (xwidget-webkit-set-user-agent xw xwidget-webkit-user-agent))
+       (when xwidget-webkit-cookie-file
+         (xwidget-webkit-set-cookie-storage-file
+          xw (expand-file-name xwidget-webkit-cookie-file)))
+--- a/src/nsxwidget.h
++++ b/src/nsxwidget.h
+@@ -34,6 +34,7 @@
+ bool nsxwidget_is_web_view (struct xwidget *xw);
+ Lisp_Object nsxwidget_webkit_uri (struct xwidget *xw);
+ Lisp_Object nsxwidget_webkit_title (struct xwidget *xw);
++void nsxwidget_webkit_set_user_agent (struct xwidget *xw, const char *user_agent);
+ void nsxwidget_webkit_goto_uri (struct xwidget *xw, const char *uri);
+ void nsxwidget_webkit_goto_history (struct xwidget *xw, int rel_pos);
+ double nsxwidget_webkit_estimated_load_progress(struct xwidget *xw);
+--- a/src/nsxwidget.m
++++ b/src/nsxwidget.m
+@@ -86,10 +86,6 @@
+                                 autorelease];
+       self.navigationDelegate = self;
+       self.UIDelegate = self;
+-      self.customUserAgent =
+-        @"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6)"
+-        @" AppleWebKit/603.3.8 (KHTML, like Gecko)"
+-        @" Version/11.0.1 Safari/603.3.8";
+       [scriptor addScriptMessageHandler:self name:@"keyDown"];
+       WKUserScript *userScript = [[[WKUserScript alloc]
+                                     initWithSource:xwScript
+@@ -347,6 +343,15 @@
+   return [xwWebView.title lispString];
+ }
+ 
++/* Sets XW's user agent; NULL selects WebKit's default.  */
++void
++nsxwidget_webkit_set_user_agent (struct xwidget *xw, const char *user_agent)
++{
++  XwWebView *web_view = (XwWebView *) xw->xwWidget;
++  web_view.customUserAgent = user_agent
++    ? [NSString stringWithUTF8String:user_agent] : nil;
++}
++
+ /* @Note ATS - Need application transport security in 'Info.plist' or
+    remote pages will not loaded.  */
+ void
+--- a/src/xwidget.c
++++ b/src/xwidget.c
+@@ -3114,6 +3114,24 @@
+   return make_float (value);
+ }
+ 
++#ifdef NS_IMPL_COCOA
++DEFUN ("xwidget-webkit-set-user-agent",
++       Fxwidget_webkit_set_user_agent, Sxwidget_webkit_set_user_agent,
++       2, 2, 0,
++       doc: /* Set WebKit XWIDGET's USER_AGENT for subsequent requests.
++USER_AGENT is a string, or nil for WebKit's native default.
++Reload an existing page after changing its user agent.  */)
++  (Lisp_Object xwidget, Lisp_Object user_agent)
++{
++  WEBKIT_FN_INIT ();
++  if (!NILP (user_agent))
++    CHECK_STRING (user_agent);
++  nsxwidget_webkit_set_user_agent
++    (xw, NILP (user_agent) ? NULL : SSDATA (ENCODE_UTF_8 (user_agent)));
++  return Qnil;
++}
++#endif
++
+ DEFUN ("xwidget-webkit-goto-uri",
+        Fxwidget_webkit_goto_uri, Sxwidget_webkit_goto_uri,
+        2, 2, 0,
+@@ -3946,6 +3964,9 @@
+ 
+   defsubr (&Sxwidget_webkit_uri);
+   defsubr (&Sxwidget_webkit_title);
++#ifdef NS_IMPL_COCOA
++  defsubr (&Sxwidget_webkit_set_user_agent);
++#endif
+   defsubr (&Sxwidget_webkit_goto_uri);
+   defsubr (&Sxwidget_webkit_goto_history);
+   defsubr (&Sxwidget_webkit_zoom);

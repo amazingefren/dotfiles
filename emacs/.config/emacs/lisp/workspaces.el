@@ -220,10 +220,20 @@ own layout, buffers, and herdr session."
   "Function from a workspace name to a status string for its tab, or nil.
 herdr-mode sets it to draw the agent counts.")
 
-(defun workspace--tab-item (key label face command help)
-  "A tab-bar item for KEY showing LABEL in FACE, running COMMAND on click."
+(defface workspace-tab-group '((t :box t))
+  "Shared border around a project and its visible sub-workspaces."
+  :group 'tab-bar)
+
+(defface workspace-tab-child '((t :inherit tab-bar-tab))
+  "Selected sub-workspace within a project."
+  :group 'tab-bar)
+
+(defun workspace--tab-item (key label face command help &optional group)
+  "Return an item for KEY with LABEL, FACE, COMMAND, HELP, and optional GROUP border."
   (let ((label (copy-sequence label)))
     (add-face-text-property 0 (length label) face t label)
+    (when group
+      (add-face-text-property 0 (length label) 'workspace-tab-group nil label))
     `(,key menu-item ,label ,command :help ,help)))
 
 (defun workspace--status (names)
@@ -234,12 +244,6 @@ herdr-mode sets it to draw the agent counts.")
 (defun workspace--short (text)
   "TEXT cut to 24 characters for a nested child tab."
   (truncate-string-to-width text 24 nil nil "…"))
-
-(defun workspace--divider (key &optional glyph)
-  "A divider, GLYPH or │, in the theme's shadow face.
-The tabs' own borders don't show between neighbouring tabs, so this is what
-separates them: │ between top-level tabs, a lighter · between children."
-  `(,(intern key) menu-item ,(propertize (or glyph "│") 'face '(:inherit (shadow tab-bar))) ignore))
 
 (defun workspace--child-label (child project)
   "Nested tab label for CHILD of PROJECT: base, ⎇ branch, or a sub-workspace's name."
@@ -252,8 +256,7 @@ separates them: │ between top-level tabs, a lighter · between children."
 Each is numbered and shows its agent counts.  Nested, the current
 project's tab opens up into its children; another project's tab shows
 how many children it has and counts all of their agents."
-  (let ((current (persp-current-name)) (i 0) previous items
-        (header 'tab-bar-tab))
+  (let ((current (persp-current-name)) (i 0) previous items)
     (dolist (slot (workspace--slots))
       (setq i (1+ i))
       (let* ((name (car slot))
@@ -270,28 +273,25 @@ how many children it has and counts all of their agents."
                    (concat (if grouped (propertize (format "%d " i) 'face (list 'shadow face)) (funcall number face))
                            (propertize shown 'face face) (workspace--status name) " ")
                    face (lambda () (interactive) (persp-switch name))
-                   (format "Switch to %s; drag to move" name))
+                   (format "Switch to %s; drag to move" name) (equal name current))
                   items)))
          ((member current slot)
           (push (workspace--tab-item
                  (intern (concat "project:" project))
-                 (concat (propertize (format " %d " i) 'face (list 'shadow header))
-                         (propertize (concat project " ›") 'face header) " ")
-                 header
+                 (concat (funcall number 'tab-bar-tab) project " ")
+                 'tab-bar-tab
                  (lambda () (interactive) (workspace-next-child))
-                 (format "%s: click or s-%d for the next child, drag to move the project" project i))
+                 (format "%s: click or s-%d for the next child, drag to move the project" project i)
+                 t)
                 items)
           (dolist (child slot)
-            (let ((face (if (equal child current) 'tab-bar-tab 'tab-bar-tab-inactive)))
-              (unless (eq child (car slot))
-                (push (workspace--divider (concat "sep:" child) "·") items))
+            (let ((face (if (equal child current) 'workspace-tab-child 'tab-bar-tab-inactive)))
               (push (workspace--tab-item
                      (intern child)
-                     (concat " "
-                             (propertize (workspace--child-label child project) 'face face)
+                     (concat " " (workspace--child-label child project)
                              (workspace--status child) " ")
                      face (lambda () (interactive) (persp-switch child))
-                     (format "Switch to %s" child))
+                     (format "Switch to %s" child) t)
                     items))))
          (t
           (let ((extra (seq-count (lambda (n) (not (equal n project))) slot)))
@@ -305,9 +305,8 @@ how many children it has and counts all of their agents."
                    (let ((slot slot)) (lambda () (interactive) (workspace--visit-slot slot)))
                    (format "Switch to %s; drag to move" project))
                   items))))
-        (setq previous (car (last slot)))
-        (push (workspace--divider (format "gap:%d" i)) items)))
-    (nreverse (cdr items))))
+        (setq previous (car (last slot)))))
+    (nreverse items)))
 
 ;; tab-bar's own mouse commands act on its tabs, which are hidden.
 (defun workspace--at (posn)
@@ -380,10 +379,6 @@ onto a sibling reorders the children."
 (use-package tab-line
   :ensure nil
   :config
-  ;; tab-line uses this face only for the shown buffer in the selected window, so
-  ;; the split you are in stands out, in the theme's own accent color.
-  (custom-set-faces
-   '(tab-line-tab-current ((t :inherit (bold font-lock-keyword-face tab-line-tab) :overline t))))
   (global-tab-line-mode 1)
   (with-eval-after-load 'evil
     (evil-define-key 'motion 'global

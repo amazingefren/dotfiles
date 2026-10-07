@@ -11,6 +11,11 @@
   (dirvish-side-window-parameters '((no-delete-other-windows . t)))
   (insert-directory-program "gls")          ; BSD ls lacks --group-directories-first
   :config
+  (add-to-list 'load-path
+               (expand-file-name
+                "extensions"
+                (file-name-directory (locate-library "dirvish"))))
+  (require 'dirvish-side)
   (require 'dirvish-vc)                     ; collects git state; loads only for its own attributes
   (setf (alist-get 'ignored dirvish-vc-state-face-alist) 'shadow)
   (add-hook 'dirvish-find-entry-hook #'tree--display-file)

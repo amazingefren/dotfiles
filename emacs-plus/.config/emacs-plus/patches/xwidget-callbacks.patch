@@ -1,0 +1,126 @@
+--- a/src/nsxwidget.h
++++ b/src/nsxwidget.h
+@@ -44,7 +44,7 @@
+ void nsxwidget_webkit_stop_loading (struct xwidget *xw);
+ void nsxwidget_webkit_zoom (struct xwidget *xw, double zoom_change);
+ void nsxwidget_webkit_execute_script (struct xwidget *xw, const char *script,
+-                                      Lisp_Object fun);
++                                     ptrdiff_t callback_index);
+ 
+ /* Functions for xwidget model.  */
+ 
+--- a/src/nsxwidget.m
++++ b/src/nsxwidget.m
+@@ -526,29 +526,44 @@
+ 
+ void
+ nsxwidget_webkit_execute_script (struct xwidget *xw, const char *script,
+-                                 Lisp_Object fun)
++                                ptrdiff_t callback_index)
+ {
+   XwWebView *xwWebView = (XwWebView *) xw->xwWidget;
+   if ([xwWebView.urlScriptBlocked[xwWebView.URL] boolValue])
+     {
+-      message ("Javascript is blocked by 'CSP: sandbox'.");
++      if (callback_index >= 0)
++        {
++          Lisp_Object callback = AREF (xw->native_callbacks, callback_index);
++          store_xwidget_js_callback_event
++            (xw, callback, build_string ("{\"error\":\"JavaScript is blocked by CSP sandbox\"}"));
++          ASET (xw->native_callbacks, callback_index, Qnil);
++        }
+       return;
+     }
+ 
+   NSString *javascriptString = [NSString stringWithUTF8String:script];
+   [xwWebView evaluateJavaScript:javascriptString
+               completionHandler:^(id result, NSError *error) {
++      struct xwidget *widget = xwWebView.xw;
++      if (!widget || callback_index < 0)
++        return;
++      Lisp_Object callback = AREF (widget->native_callbacks, callback_index);
++      if (NILP (callback))
++        return;
++      Lisp_Object value;
+       if (error)
+         {
+-          NSLog (@"evaluateJavaScript error : %@", error.localizedDescription);
+-          NSLog (@"error script=%@", javascriptString);
++          NSData *reply = [NSJSONSerialization
++            dataWithJSONObject:@{@"error": error.localizedDescription}
++            options:0 error:NULL];
++          value = [[[[NSString alloc] initWithData:reply
++                                         encoding:NSUTF8StringEncoding]
++                    autorelease] lispString];
+         }
+-      else if (result && FUNCTIONP (fun))
+-        {
+-          /* NSLog (@"result=%@, type=%@", result, [result class]); */
+-          Lisp_Object lisp_value = js_to_lisp (result);
+-          store_xwidget_js_callback_event (xw, fun, lisp_value);
+-        }
++      else
++        value = js_to_lisp (result);
++      store_xwidget_js_callback_event (widget, callback, value);
++      ASET (widget->native_callbacks, callback_index, Qnil);
+     }];
+ }
+ 
+--- a/src/xwidget.c
++++ b/src/xwidget.c
+@@ -3252,6 +3252,25 @@
+ }
+ #endif
+ 
++#ifdef NS_IMPL_COCOA
++/* Roots CALLBACK until its native completion; returns the vector index.  */
++static ptrdiff_t
++save_native_callback (struct xwidget *xw, Lisp_Object callback)
++{
++  Lisp_Object callbacks = xw->native_callbacks;
++  if (NILP (callbacks))
++    xw->native_callbacks = callbacks = make_nil_vector (4);
++  ptrdiff_t index;
++  for (index = 0; index < ASIZE (callbacks); index++)
++    if (NILP (AREF (callbacks, index)))
++      break;
++  if (index == ASIZE (callbacks))
++    xw->native_callbacks = callbacks = larger_vector (callbacks, 1, -1);
++  ASET (callbacks, index, callback);
++  return index;
++}
++#endif
++
+ DEFUN ("xwidget-webkit-execute-script",
+        Fxwidget_webkit_execute_script, Sxwidget_webkit_execute_script,
+        2, 3, 0,
+@@ -3282,7 +3301,8 @@
+                                   webkit_javascript_finished_cb,
+ 				  (gpointer) idx);
+ #elif defined NS_IMPL_COCOA
+-  nsxwidget_webkit_execute_script (xw, SSDATA (script), fun);
++  ptrdiff_t callback_index = NILP (fun) ? -1 : save_native_callback (xw, fun);
++  nsxwidget_webkit_execute_script (xw, SSDATA (script), callback_index);
+ #endif
+   return Qnil;
+ }
+@@ -3300,17 +3320,8 @@
+   if (!FUNCTIONP (callback))
+     wrong_type_argument (Qinvalid_function, callback);
+ 
+-  Lisp_Object callbacks = xw->native_callbacks;
+-  if (NILP (callbacks))
+-    xw->native_callbacks = callbacks = make_nil_vector (4);
+-  ptrdiff_t index;
+-  for (index = 0; index < ASIZE (callbacks); index++)
+-    if (NILP (AREF (callbacks, index)))
+-      break;
+-  if (index == ASIZE (callbacks))
+-    xw->native_callbacks = callbacks = larger_vector (callbacks, 1, -1);
+-  ASET (callbacks, index, callback);
+-  nsxwidget_webkit_snapshot (xw, SSDATA (ENCODE_UTF_8 (file)), index);
++  ptrdiff_t callback_index = save_native_callback (xw, callback);
++  nsxwidget_webkit_snapshot (xw, SSDATA (ENCODE_UTF_8 (file)), callback_index);
+   return Qnil;
+ }
+ #endif

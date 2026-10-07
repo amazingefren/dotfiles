@@ -1,0 +1,39 @@
+--- a/src/nsxwidget.m
++++ b/src/nsxwidget.m
+@@ -24,6 +24,7 @@
+ #include "dispextern.h"
+ #include "buffer.h"
+ #include "frame.h"
++#include "window.h"
+ #include "nsterm.h"
+ #include "xwidget.h"
+ 
+@@ -587,6 +588,7 @@
+                          xwidget:xw];
+   xw->xwWindow = [[XwWindow alloc]
+                    initWithFrame:rect];
++  [xw->xwWindow setClipsToBounds:YES];
+   [xw->xwWindow addSubview:xw->xwWidget];
+   xw->xv = NULL; /* for 1 to 1 relationship of webkit2.  */
+   unblock_input ();
+@@ -655,6 +657,12 @@
+ 
+ @implementation XvWindow : NSView
+ - (BOOL) isFlipped { return YES; }
++- (void) drawRect:(NSRect)dirtyRect
++{
++  struct frame *frame = XFRAME (WINDOW_FRAME (XWINDOW (self.xv->w)));
++  [FRAME_BACKGROUND_COLOR (frame) setFill];
++  NSRectFill (self.bounds);
++}
+ @end
+ 
+ void
+@@ -675,6 +683,7 @@
+ 
+   xv->xvWindow = [[XvWindow alloc]
+                    initWithFrame:NSMakeRect (x, y, xw->width, xw->height)];
++  [xv->xvWindow setClipsToBounds:YES];
+   xv->xvWindow.xw = xw;
+   xv->xvWindow.xv = xv;
+ 

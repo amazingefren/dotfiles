@@ -7,13 +7,12 @@
 ;; callbacks, exactly one of which runs.  Requests (`webkit-agent-request')
 ;; wrap that for callers that poll, such as the MCP bridge.
 ;;
-;; Input is synthesized in JavaScript, so events have isTrusted false and CSS
-;; :hover does not apply.  Screenshots capture the page's window on screen and
-;; need Screen Recording permission for Emacs.
+;; Runtime actions use JavaScript events. Native input uses Cocoa editing and clicks.
 
 (require 'cl-lib)
 (require 'json)
 (require 'subr-x)
+(require 'tab-line)
 (require 'xwidget)
 
 (defgroup webkit-agent nil
@@ -49,7 +48,7 @@
   "An xwidget WebKit buffer under agent control.
 LOADING is non-nil between a navigation and its load-finished event.
 LOAD-EVENTS counts load-changed events."
-  id buffer loading (load-events 0))
+  id buffer loading (load-events 0) downloads)
 
 (cl-defstruct (webkit-agent-request (:constructor webkit-agent-request--create))
   "Asynchronous work polled by ID.  STATUS is pending, done or failed."
@@ -69,6 +68,137 @@ LOAD-EVENTS counts load-changed events."
 
 (defvar webkit-agent--runtime nil
   "Cons of the runtime source and its version hash, read on first use.")
+
+(defvar xwidget-webkit-profile nil
+  "Native profile settings as JSON, or nil for the default data store.")
+
+(defvar-local webkit-agent-workspace nil
+  "Workspace owning this browser page.")
+
+(defun webkit-agent--setup-buffer (buffer)
+  "Installs browser tabs in BUFFER and returns it."
+  (with-current-buffer buffer
+    (setq-local webkit-agent-workspace
+                (or webkit-agent-workspace
+                    (and (bound-and-true-p persp-mode) (persp-current-name)))
+                tab-line-format '((:eval (webkit-agent--tabs))))
+    (local-set-key (kbd "C-c C-t") #'webkit-agent-new-tab))
+  buffer)
+
+(defun webkit-agent--dedicate-windows (frame)
+  "Dedicates FRAME's browser windows to browser pages."
+  (dolist (window (window-list frame 'no-minibuffer))
+    (when (eq (buffer-local-value 'major-mode (window-buffer window)) 'xwidget-webkit-mode)
+      (set-window-parameter window 'webkit-agent-browser t)
+      (set-window-dedicated-p window t))))
+
+(advice-add 'xwidget-webkit--create-new-session-buffer :filter-return #'webkit-agent--setup-buffer)
+(add-hook 'window-buffer-change-functions #'webkit-agent--dedicate-windows)
+
+(defun webkit-agent--button (label function)
+  "Returns clickable LABEL invoking FUNCTION in the clicked window."
+  (let ((map (make-sparse-keymap)))
+    (let ((command (lambda (event)
+                     (interactive "e")
+                     (select-window (posn-window (event-start event)))
+                     (funcall function))))
+      (define-key map [tab-line down-mouse-1] command)
+      (define-key map [tab-line mouse-1] #'ignore))
+    (propertize label 'keymap map 'mouse-face 'highlight)))
+
+(defun webkit-agent--tabs ()
+  "Returns tabs for pages belonging to the current browser workspace."
+  (let ((workspace webkit-agent-workspace))
+    (append
+     (mapcar
+      (lambda (page)
+        (let* ((buffer (webkit-agent-page-buffer page))
+               (title (or (xwidget-webkit-title (webkit-agent--xwidget page)) "")))
+          (webkit-agent--button
+           (propertize
+            (format " %s " (if (string-empty-p title) (webkit-agent-page-id page) title))
+            'face (if (eq buffer (current-buffer)) 'tab-line-tab-current 'tab-line-tab))
+           (lambda ()
+             (set-window-dedicated-p (selected-window) nil)
+             (set-window-buffer (selected-window) buffer)
+             (set-window-dedicated-p (selected-window) t)
+             (xwidget-webkit-auto-adjust-size (selected-window))))))
+      (seq-filter (lambda (page)
+                    (equal workspace (buffer-local-value
+                                      'webkit-agent-workspace (webkit-agent-page-buffer page))))
+                  (webkit-agent-pages)))
+     (list (webkit-agent--button " + " #'webkit-agent-new-tab)))))
+
+(defun webkit-agent-new-tab ()
+  "Prompts for an empty URL and opens it in a new browser tab."
+  (interactive)
+  (let ((url (read-string "New tab URL: ")))
+    (unless (string-match-p "\\`[A-Za-z]+:" url)
+      (setq url (concat "https://" url)))
+    (webkit-agent-open url)))
+
+(declare-function xwidget-webkit-set-user-agent "xwidget.c" (xwidget user-agent))
+(declare-function xwidget-webkit-set-viewport "xwidget.c" (xwidget width height))
+(declare-function xwidget-webkit-snapshot "xwidget.c" (xwidget file callback))
+(declare-function xwidget-webkit-session-command "xwidget.c" (xwidget request callback))
+
+(defun webkit-agent-session (page operation arguments on-value on-error)
+  "Run native session OPERATION with ARGUMENTS in PAGE.
+Call ON-VALUE with the result or ON-ERROR with an error string.
+Signal `user-error' for invalid cookies or unavailable native support."
+  (unless (fboundp 'xwidget-webkit-session-command)
+    (user-error "Native session controls need the sessions patch; rebuild Emacs"))
+  (when (equal operation "set_cookies")
+    (webkit-agent--check-cookies (gethash "cookies" arguments)))
+  (let ((request (copy-hash-table arguments))
+        (settled nil)
+        timer)
+    (puthash "operation" operation request)
+    (setq timer (run-at-time
+                 webkit-agent-script-timeout nil
+                 (lambda ()
+                   (unless settled
+                     (setq settled t)
+                     (when (equal operation "download")
+                       (xwidget-webkit-session-command
+                        (webkit-agent--xwidget page) "{\"operation\":\"cancel_download\"}" #'ignore))
+                     (funcall on-error (format "Page %s native %s timed out"
+                                               (webkit-agent-page-id page) operation))))))
+    (condition-case err
+        (xwidget-webkit-session-command
+         (webkit-agent--xwidget page) (json-serialize request)
+         (lambda (reply)
+           (unless settled
+             (setq settled t)
+             (cancel-timer timer)
+             (let ((parsed (webkit-agent--parse-reply reply)))
+               (cond
+                ((not parsed) (funcall on-error "Native session returned invalid JSON"))
+                ((gethash "error" parsed) (funcall on-error (gethash "error" parsed)))
+                (t (funcall on-value (gethash "value" parsed))))))))
+      (error
+       (setq settled t)
+       (cancel-timer timer)
+       (funcall on-error (error-message-string err))))))
+
+(defun webkit-agent--check-cookies (cookies)
+  "Signal `user-error' unless COOKIES is a vector of valid cookie objects."
+  (unless (vectorp cookies) (user-error "cookies must be an array"))
+  (seq-doseq (cookie cookies)
+    (unless (and (hash-table-p cookie)
+                 (seq-every-p (lambda (key) (stringp (gethash key cookie)))
+                              '("domain" "name" "path" "value"))
+                 (> (length (gethash "domain" cookie)) 0)
+                 (> (length (gethash "name" cookie)) 0)
+                 (string-prefix-p "/" (gethash "path" cookie))
+                 (not (string-match-p "[\r\n\0]"
+                                      (mapconcat (lambda (key) (gethash key cookie))
+                                                 '("domain" "name" "path" "value") "")))
+                 (seq-every-p (lambda (key) (memq (gethash key cookie :false) '(t :false)))
+                              '("http_only" "secure"))
+                 (member (gethash "same_site" cookie "") '("" "lax" "strict" "none"))
+                 (numberp (gethash "expires" cookie -1)))
+      (user-error "Invalid cookie: needs domain, name, path, value and valid attributes"))))
 
 (defun webkit-agent-call (page method arguments on-value on-error)
   "Run runtime METHOD with ARGUMENTS in PAGE.
@@ -104,20 +234,61 @@ passes."
 
 (defun webkit-agent-close (page)
   "Kill PAGE's buffer without confirmation, which destroys its WebKit view.
-Windows showing it go back to what they showed before, or close."
+Windows showing it switch to another workspace tab, or close."
   (let ((buffer (webkit-agent-page-buffer page))
         (kill-buffer-query-functions nil))
-    (quit-windows-on buffer t)
+    (let* ((workspace (buffer-local-value 'webkit-agent-workspace buffer))
+           (next (seq-find
+                  (lambda (candidate)
+                    (and (not (eq candidate page))
+                         (equal workspace (buffer-local-value
+                                           'webkit-agent-workspace
+                                           (webkit-agent-page-buffer candidate)))))
+                  (webkit-agent-pages))))
+      (if next
+          (dolist (window (get-buffer-window-list buffer nil t))
+            (set-window-dedicated-p window nil)
+            (set-window-buffer window (webkit-agent-page-buffer next))
+            (set-window-dedicated-p window t)
+            (xwidget-webkit-auto-adjust-size window))
+        (quit-windows-on buffer t)))
     (when (buffer-live-p buffer)
       (kill-buffer buffer)))
   (webkit-agent--forget-dead-pages))
 
+(defun webkit-agent-configure (page settings)
+  "Apply SETTINGS's user_agent and viewport to PAGE.
+Omitted keys keep their current values; JSON null restores native defaults.
+Signal `user-error' for invalid settings or missing native support."
+  (webkit-agent--check-settings settings)
+  (let ((xwidget (webkit-agent--xwidget page))
+        (user-agent (gethash "user_agent" settings 'absent))
+        (viewport (gethash "viewport" settings 'absent)))
+    (unless (eq user-agent 'absent)
+      (xwidget-webkit-set-user-agent xwidget (unless (eq user-agent :null) user-agent)))
+    (unless (eq viewport 'absent)
+      (xwidget-webkit-set-viewport
+       xwidget
+       (unless (eq viewport :null) (gethash "width" viewport))
+       (unless (eq viewport :null) (gethash "height" viewport))))))
+
 (defun webkit-agent-display (page)
   "Show PAGE with `webkit-agent-display-action' without selecting it.
 Return the window."
-  (let ((window (display-buffer (webkit-agent-page-buffer page) webkit-agent-display-action)))
+  (let* ((browser-window
+          (seq-find (lambda (window) (window-parameter window 'webkit-agent-browser))
+                    (window-list nil 'no-minibuffer)))
+         (window
+          (if browser-window
+              (progn
+                (set-window-dedicated-p browser-window nil)
+                (set-window-buffer browser-window (webkit-agent-page-buffer page))
+                browser-window)
+            (display-buffer (webkit-agent-page-buffer page) webkit-agent-display-action))))
     (unless window
       (error "Could not display page %s" (webkit-agent-page-id page)))
+    (set-window-parameter window 'webkit-agent-browser t)
+    (set-window-dedicated-p window t)
     (xwidget-webkit-auto-adjust-size window)
     window))
 
@@ -146,19 +317,32 @@ the page's info after loading; ON-ERROR with a message."
       (xwidget-webkit-goto-uri xwidget url))
     (webkit-agent-wait-for-load page on-value on-error)))
 
-(defun webkit-agent-open (url &optional hidden)
+(defun webkit-agent-open (url &optional hidden settings)
   "Open URL in a new page and return the page.
 The page is shown with `webkit-agent-display' unless HIDDEN is non-nil.
+SETTINGS applies user_agent and viewport before the first request.
 Loading continues after this returns; see `webkit-agent-wait-for-load'."
   (unless (featurep 'xwidget-internal)
     (user-error "This Emacs was built without xwidgets"))
   (webkit-agent--check-url url)
-  (let* ((buffer (save-window-excursion
-                   (xwidget-webkit-new-session url)
-                   (current-buffer)))
+  (when settings (webkit-agent--check-settings settings))
+  (let* ((profile (and settings (gethash "profile" settings)))
+         (xwidget-webkit-profile
+          (when profile
+            (let* ((name (gethash "name" profile))
+                   (digest (secure-hash 'md5 (concat "emacs-webkit-profile:" name)))
+                   (native-profile (copy-hash-table profile)))
+              (puthash "identifier"
+                       (format "%s-%s-%s-%s-%s" (substring digest 0 8) (substring digest 8 12)
+                               (substring digest 12 16) (substring digest 16 20) (substring digest 20))
+                       native-profile)
+              (json-serialize native-profile))))
+         (buffer (xwidget-webkit--create-new-session-buffer url))
          (page (webkit-agent--adopt buffer)))
+    (when settings (webkit-agent-configure page settings))
     (setf (webkit-agent-page-loading page) t)
     (unless hidden (webkit-agent-display page))
+    (xwidget-webkit-goto-uri (webkit-agent--xwidget page) url)
     page))
 
 (defun webkit-agent-page-summary (page)
@@ -210,26 +394,29 @@ STATUS is pending, done or failed; a failed VALUE is the error message."
     (cons (webkit-agent-request-status request) (webkit-agent-request-value request))))
 
 (defun webkit-agent-screenshot (page file on-value on-error)
-  "Show PAGE and capture its window to PNG FILE.
-ON-VALUE is called with FILE; ON-ERROR with a message.  Capturing needs
-Screen Recording permission for Emacs and the window unobscured on screen."
-  (let ((window (webkit-agent-display page)))
-    (redisplay t)
-    (run-at-time
-     0.3 nil
-     (lambda ()
-       (condition-case err
-           (pcase-let* ((`(,frame-left ,frame-top . ,_)
-                         (frame-edges (window-frame window) 'native-edges))
-                        (`(,left ,top ,right ,bottom) (window-inside-pixel-edges window))
-                        (region (format "-R%d,%d,%d,%d" (+ frame-left left) (+ frame-top top)
-                                        (- right left) (- bottom top))))
-             (with-temp-buffer
-               (unless (zerop (call-process "screencapture" nil t nil "-x" "-t" "png" region file))
-                 (error "screencapture failed for page %s: %s; grant Emacs Screen Recording permission in System Settings > Privacy & Security"
-                        (webkit-agent-page-id page) (string-trim (buffer-string)))))
-             (funcall on-value file))
-         (error (funcall on-error (error-message-string err))))))))
+  "Capture PAGE's full viewport to PNG FILE without changing windows.
+ON-VALUE receives FILE; ON-ERROR receives a failure message.
+Signal `user-error' when native snapshot support is absent."
+  (unless (fboundp 'xwidget-webkit-snapshot)
+    (user-error "Page %s needs the native snapshot patch; rebuild Emacs"
+                (webkit-agent-page-id page)))
+  (let* ((timer nil)
+        (settled nil)
+        (finish (lambda (failure)
+                  (unless settled
+                    (setq settled t)
+                    (when timer (cancel-timer timer))
+                    (if failure
+                        (progn (when (file-exists-p file) (delete-file file))
+                               (funcall on-error failure))
+                      (funcall on-value file))))))
+    (setq timer (run-at-time webkit-agent-script-timeout nil
+                             (lambda ()
+                               (funcall finish (format "Snapshot timed out for page %s: %s"
+                                                       (webkit-agent-page-id page) file)))))
+    (condition-case err
+        (xwidget-webkit-snapshot (webkit-agent--xwidget page) (expand-file-name file) finish)
+      (error (funcall finish (error-message-string err))))))
 
 (defun webkit-agent-wait (page condition timeout on-value on-error)
   "Poll runtime check CONDITION in PAGE until it holds or TIMEOUT seconds pass.
@@ -310,6 +497,9 @@ CALLBACK never runs when the script fails to parse or the page goes away."
   "Dispatch PAGE's JSON REPLY string to ON-VALUE or ON-ERROR.
 An {async: token} reply is awaited with `webkit-agent--await'."
   (let ((parsed (webkit-agent--parse-reply reply)))
+    (when (and parsed (gethash "downloads" parsed))
+      (setf (webkit-agent-page-downloads page)
+            (append (webkit-agent-page-downloads page) (append (gethash "downloads" parsed) nil))))
     (cond
      ((not parsed)
       (funcall on-error (format "Page %s returned a non-JSON reply: %S" (webkit-agent-page-id page) reply)))
@@ -358,6 +548,37 @@ Polling stops once SETTLED-P returns non-nil; the outcome goes to
   (unless (and (stringp url) (string-match-p "\\`\\(https?\\|file\\|about\\|data\\):" url))
     (user-error "Need an http, https, file, about or data URL, not %S" url)))
 
+(defun webkit-agent--check-settings (settings)
+  "Signal `user-error' for invalid SETTINGS or unavailable native APIs."
+  (let ((user-agent (gethash "user_agent" settings 'absent))
+        (viewport (gethash "viewport" settings 'absent))
+        (profile (gethash "profile" settings 'absent)))
+    (unless (eq profile 'absent)
+      (unless (and (hash-table-p profile)
+                   (stringp (gethash "name" profile))
+                   (string-match-p "\\`[A-Za-z0-9_-]\\{1,64\\}\\'" (gethash "name" profile))
+                   (not (equal (gethash "name" profile) "default"))
+                   (memq (gethash "persistent" profile :false) '(t :false)))
+        (user-error "profile needs a name (1..64 letters, digits, _ or -; excluding default) and a boolean persistent"))
+      (unless (fboundp 'xwidget-webkit-session-command)
+        (user-error "profile needs the native sessions patch; rebuild Emacs")))
+    (unless (eq user-agent 'absent)
+      (unless (or (eq user-agent :null) (and (stringp user-agent) (> (length user-agent) 0)
+                                            (not (string-match-p "[\r\n\0]" user-agent))))
+        (user-error "user_agent must be null or a non-empty string without control separators"))
+      (unless (fboundp 'xwidget-webkit-set-user-agent)
+        (user-error "user_agent needs the native user-agent patch; rebuild Emacs")))
+    (unless (eq viewport 'absent)
+      (unless (or (eq viewport :null)
+                  (and (hash-table-p viewport)
+                       (seq-every-p (lambda (key)
+                                      (let ((dimension (gethash key viewport)))
+                                        (and (integerp dimension) (<= 1 dimension 4096))))
+                                    '("width" "height"))))
+        (user-error "viewport must be null or width and height integers in 1..4096"))
+      (unless (fboundp 'xwidget-webkit-set-viewport)
+        (user-error "viewport needs the native viewport patch; rebuild Emacs")))))
+
 (defun webkit-agent--adopt (buffer)
   "Register xwidget WebKit BUFFER as a page, track its loads, and return it."
   (let* ((page (webkit-agent-page--create
@@ -367,6 +588,7 @@ Polling stops once SETTLED-P returns non-nil; the outcome goes to
     (xwidget-put xwidget 'callback #'webkit-agent--callback)
     (with-current-buffer buffer
       (setq-local mode-line-process (format " %s" (webkit-agent-page-id page))))
+    (webkit-agent--setup-buffer buffer)
     (setq webkit-agent--pages (append webkit-agent--pages (list page)))
     page))
 
@@ -374,7 +596,14 @@ Polling stops once SETTLED-P returns non-nil; the outcome goes to
   "Handle XWIDGET's event TYPE as `xwidget-webkit-callback' does, tracking loads.
 The runtime is installed when a load commits and again when it finishes, so
 console messages are recorded from early in the page's life."
-  (xwidget-webkit-callback xwidget type)
+  (if (eq type 'download-callback)
+      (when-let* ((page (webkit-agent--page-for-buffer (xwidget-buffer xwidget))))
+        (setf (webkit-agent-page-loading page) nil)
+        (push `((url . ,(nth 3 last-input-event))
+                (mime_type . ,(nth 4 last-input-event))
+                (filename . ,(nth 5 last-input-event)))
+              (webkit-agent-page-downloads page)))
+    (xwidget-webkit-callback xwidget type))
   (when-let* (((eq type 'load-changed))
               (page (webkit-agent--page-for-buffer (xwidget-buffer xwidget)))
               (state (nth 3 last-input-event)))

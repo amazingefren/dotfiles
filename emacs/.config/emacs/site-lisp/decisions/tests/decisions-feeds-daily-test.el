@@ -1,0 +1,96 @@
+;;; decisions-feeds-daily-test.el --- Daily feed sorting and read-state tests -*- lexical-binding: t; -*-
+
+(load (expand-file-name "decisions-feeds-content-test.el"
+                        (file-name-directory (or load-file-name buffer-file-name))) nil t)
+
+(ert-deftest decisions-feeds-default-daily-scope-includes-read-and-unread ()
+  (decisions-feeds-test--isolated
+    (let* ((decisions-feeds-default-filter "@2-weeks-ago")
+           (recent (decisions-feeds-test--entry "recent" (float-time)))
+           (read (decisions-feeds-test--entry "read" (- (float-time) 3600)))
+           (old (decisions-feeds-test--entry "old" (- (float-time) (* 30 86400)))))
+      (setf (elfeed-entry-tags read) nil)
+      (with-current-buffer (decisions-feeds-test--open (list recent read old))
+        (should (equal decisions-feeds--filter "@2-weeks-ago"))
+        (should (equal (decisions-feeds-test--rows) (list recent read)))
+        (should (string-match-p "stopped\\|pending" (buffer-string)))
+        (should (string-match-p "unread" (buffer-string)))
+        (should (string-match-p "read +" (buffer-string)))
+        (should (eq recent (get-text-property (point) 'elfeed-entry)))
+        (should (equal (buffer-local-value 'elfeed-search-filter (get-buffer "*elfeed-search*")) "+unread"))
+        (should (equal (elfeed-entry-tags recent) '(unread)))
+        (should-not (elfeed-entry-tags read))))))
+
+(ert-deftest decisions-feeds-newest-day-precedes-higher-scoring-older-day ()
+  (decisions-feeds-test--isolated
+    (let* ((newer-low (decisions-feeds-test--entry "newer-low" (float-time (encode-time 0 0 23 2 10 2026))))
+           (newer-high (decisions-feeds-test--entry "newer-high" (float-time (encode-time 0 0 9 2 10 2026))))
+           (older-high (decisions-feeds-test--entry "older-high" (float-time (encode-time 59 59 23 1 10 2026)))))
+      (with-current-buffer (decisions-feeds-test--open (list newer-low newer-high older-high))
+        (decisions-feeds-test--select newer-low)
+        (dotimes (index 3)
+          (decisions-feeds-test--reply
+           (nth index decisions-feeds-test--calls) "succeeded"
+           (if (= index 0)
+               (decisions--object "read-now" 0.1 "save" 0.6 "skip" 0.2 "undetermined" 0.1)
+             (decisions--object "read-now" 0.9 "save" 0.05 "skip" 0.03 "undetermined" 0.02)))
+          (when (< index 2) (decisions-feeds-test--wait-for-call (+ index 2))))
+        (should (equal (decisions-feeds-test--rows) (list newer-high newer-low older-high)))
+        (should (eq newer-low (get-text-property (point) 'elfeed-entry)))
+        (let* ((text (buffer-string))
+               (newer-heading (string-match "^2026-10-02  " text))
+               (older-heading (string-match "^2026-10-01  " text)))
+          (should newer-heading)
+          (should older-heading)
+          (should (< newer-heading older-heading))
+          (should-not (get-text-property newer-heading 'elfeed-entry text)))
+        (goto-char (point-min))
+        (should (= 1 (how-many "^2026-10-02  " (point-min) (point-max))))
+        (should (= 1 (how-many "^2026-10-01  " (point-min) (point-max))))))))
+
+(ert-deftest decisions-feeds-groups-across-local-midnight ()
+  (decisions-feeds-test--isolated
+    (let ((before (decisions-feeds-test--entry "before" (float-time (encode-time 59 59 23 1 10 2026))))
+          (after (decisions-feeds-test--entry "after" (float-time (encode-time 0 0 0 2 10 2026)))))
+      (with-current-buffer (decisions-feeds-test--open (list before after))
+        (should (equal (decisions-feeds--day before) "2026-10-01"))
+        (should (equal (decisions-feeds--day after) "2026-10-02"))
+        (should (equal (decisions-feeds-test--rows) (list after before)))))))
+
+(ert-deftest decisions-feeds-read-and-unread-changes-reuse-recommendations ()
+  (decisions-feeds-test--isolated
+    (let ((entry (decisions-feeds-test--entry "entry" 100)))
+      (with-current-buffer (decisions-feeds-test--open (list entry))
+        (decisions-feeds-test--reply (car decisions-feeds-test--calls) "succeeded"
+                                   (decisions--object "read-now" 0.8 "save" 0.1 "skip" 0.05 "undetermined" 0.05))
+        (decisions-feeds-read)
+        (decisions-feeds-refresh)
+        (should (= 1 (length decisions-feeds-test--calls)))
+        (should (equal (decisions-feeds-test--rows) (list entry)))
+        (should-not (elfeed-entry-tags entry))
+        (decisions-feeds-unread)
+        (decisions-feeds-refresh)
+        (should (= 1 (length decisions-feeds-test--calls)))
+        (should (equal (elfeed-entry-tags entry) '(unread)))
+        (decisions-feeds-star)
+        (decisions-feeds-refresh)
+        (should (= 2 (length decisions-feeds-test--calls)))))))
+
+(ert-deftest decisions-feeds-show-more-exposes-older-days-without-new-submissions ()
+  (decisions-feeds-test--isolated
+    (let* ((elfeed-search-max-entries 1)
+           (newer (decisions-feeds-test--entry "newer" (float-time (encode-time 0 0 12 2 10 2026))))
+           (older (decisions-feeds-test--entry "older" (float-time (encode-time 0 0 12 1 10 2026)))))
+      (with-current-buffer (decisions-feeds-test--open (list newer older))
+        (should (equal (decisions-feeds-test--rows) (list newer)))
+        (let ((job decisions-feeds--job)
+              (generation decisions-feeds--generation))
+          (decisions-feeds-show-more)
+          (should (eq generation decisions-feeds--generation))
+          (should (equal job decisions-feeds--job)))
+        (should (equal (decisions-feeds-test--rows) (list newer older)))
+        (should (= 1 (length decisions-feeds-test--calls)))
+        (should (eq newer (get-text-property (point) 'elfeed-entry)))
+        (should (eq #'decisions-feeds-show-more (lookup-key decisions-feeds-mode-map (kbd "+"))))))))
+
+;;; decisions-feeds-daily-test.el ends here

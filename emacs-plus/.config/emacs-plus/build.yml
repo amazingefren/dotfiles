@@ -1,0 +1,37 @@
+patches:
+  - xwidget-user-agent:
+      "31":
+        sha256: d94c425a1118d14677fc69b619a297b23b308999bdc9334613fdb6c5fb6b0f08
+        url: ./patches/xwidget-user-agent.patch
+  - xwidget-snapshot:
+      "31":
+        sha256: 701ede216180ac0a17d23cd7a1e1bcb979c2782b89c15995abac743024304dba
+        url: ./patches/xwidget-snapshot.patch
+  - xwidget-viewport:
+      "31":
+        sha256: fcc788ca8d654760931b3b4e194ff6be144ee14a7ccf83241b41c6e7fb79e386
+        url: ./patches/xwidget-viewport.patch
+  - xwidget-callbacks:
+      "31":
+        sha256: c14518382bbe08b977c8953c82feebdb9a9e76e039c9dec1297a4649db4d746f
+        url: ./patches/xwidget-callbacks.patch
+  - xwidget-clipping:
+      "31":
+        sha256: 0d834c281184dcd2b96b120b7fefd0e5ac6832387f477c50b5a2f9a07e66aeba
+        url: ./patches/xwidget-clipping.patch
+  - xwidget-focus:
+      "31":
+        sha256: 25d63a3f13b962460847bb1b3333f5c6e3149895ec7c5fad9031b886ceacd95b
+        url: ./patches/xwidget-focus.patch
+  - xwidget-sessions:
+      "31":
+        sha256: 05f6455be5e04db97ffc95b5d19304779442e507df698516a3b81e0d1564173a
+        url: ./patches/xwidget-sessions.patch
+  - xwidget-downloads:
+      "31":
+        sha256: a5cf418df6949caee75d06de2c538468576a8d329b9320c3f9c538980814b981
+        url: ./patches/xwidget-downloads.patch
+  - xwidget-input:
+      "31":
+        sha256: 1d09e24ee891c0f7a2f935a56ad7df30f87ea03ff40396b2f3ebb3f5efc33889
+        url: ./patches/xwidget-input.patch

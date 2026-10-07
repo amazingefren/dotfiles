@@ -14,8 +14,8 @@ from codex_subagents import metadata as codex_session_metadata
 
 TOOLS = [
     {
-        "name": "emacs_laya_submit",
-        "description": "Submit arbitrary state and named choice/score/noul questions to the Emacs decision harness. Local MLX is the default; Jev is used only when explicitly selected. Returns a job ID; poll emacs_laya_result later. Questions produce decisions, not generated text or actions.",
+        "name": "emacs_decisions_submit",
+        "description": "Submit arbitrary state and named choice/score/noul questions to the Emacs decision harness. Local MLX is the default; Jev is used only when explicitly selected. Returns a job ID; poll emacs_decisions_result later. Questions produce decisions, not generated text or actions.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -27,7 +27,7 @@ TOOLS = [
                                                  "instructions": {"type": ["string", "object", "array"]},
                                                  "criteria": {"type": ["object", "array"]}},
                                   "required": ["type", "instructions"]}},
-                "backend": {"enum": ["mlx", "jev"], "default": "mlx"},
+                "backend": {"enum": ["mlx", "laya", "jev"], "default": "mlx"},
                 "model": {"type": "string", "description": "Optional checkpoint ID or configured local path; Jev model ID for backend jev."},
                 "revision": {"type": "string", "description": "Optional Hugging Face checkpoint revision."},
                 "allow_truncation": {"type": "boolean", "default": False,
@@ -38,13 +38,13 @@ TOOLS = [
         },
     },
     {
-        "name": "emacs_laya_result",
-        "description": "Retrieve this agent's LAYA job status and completed decision result. Pending jobs return promptly; wait before polling again.",
+        "name": "emacs_decisions_result",
+        "description": "Retrieve this agent's Decisions job status and completed decision result. Pending jobs return promptly; wait before polling again.",
         "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"], "additionalProperties": False},
     },
     {
-        "name": "emacs_laya_cancel",
-        "description": "Cancel this agent's LAYA job. Queued work is removed; already running work may finish but its result is discarded.",
+        "name": "emacs_decisions_cancel",
+        "description": "Cancel this agent's Decisions job. Queued work is removed; already running work may finish but its result is discarded.",
         "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"], "additionalProperties": False},
     },
     {
@@ -128,13 +128,116 @@ BROWSER_TARGET = {
     ],
 }
 BROWSER_NTH = {"type": "integer", "minimum": 0, "description": "Which match to use, visible matches first. Default 0."}
+BROWSER_USER_AGENT = {"type": ["string", "null"], "minLength": 1,
+                      "description": "Per-page HTTP and navigator.userAgent override. Null restores WebKit's default."}
+BROWSER_VIEWPORT = {
+    "description": "Fixed width and height in CSS pixels, independent of the Emacs pane. Null restores window sizing.",
+    "anyOf": [
+        {"type": "null"},
+        {"type": "object", "properties": {
+            "height": {"type": "integer", "minimum": 1, "maximum": 4096},
+            "width": {"type": "integer", "minimum": 1, "maximum": 4096}},
+         "required": ["width", "height"], "additionalProperties": False},
+    ],
+}
+
+BROWSER_COOKIE = {
+    "type": "object", "properties": {
+        "domain": {"type": "string", "minLength": 1},
+        "expires": {"type": "number"},
+        "http_only": {"type": "boolean"},
+        "name": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "pattern": "^/"},
+        "same_site": {"enum": ["", "lax", "strict", "none"]},
+        "secure": {"type": "boolean"},
+        "value": {"type": "string"},
+    }, "required": ["domain", "name", "path", "value"], "additionalProperties": False,
+}
+BROWSER_PROFILE = {
+    "type": "object", "properties": {
+        "name": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$"},
+        "persistent": {"type": "boolean"},
+    }, "required": ["name"], "additionalProperties": False,
+}
+BROWSER_STORAGE_STATE = {
+    "type": "object", "properties": {
+        "cookies": {"type": "array", "items": BROWSER_COOKIE},
+        "local_storage": {"type": "object", "additionalProperties": {"type": "string"}},
+        "origin": {"type": "string"},
+        "session_storage": {"type": "object", "additionalProperties": {"type": "string"}},
+    }, "required": ["cookies", "local_storage", "origin", "session_storage"], "additionalProperties": False,
+}
 
 BROWSER_TOOLS = [
     {
+        "name": "emacs_browser_download",
+        "description": "List download links queued without a save dialog, download an HTTP(S) URL through the page's native WebKit session to a new file, or cancel its pending download. Uses the profile's cookies. Paths are workspace-relative or absolute; parent directory must exist; existing files are rejected. One pending download per page.",
+        "inputSchema": {"type": "object", "properties": {
+            "action": {"enum": ["list", "start", "cancel"]}, "page": BROWSER_PAGE,
+            "path": {"type": "string", "minLength": 1}, "url": {"type": "string"},
+        }, "required": ["action"], "additionalProperties": False},
+    },
+    {
+        "name": "emacs_browser_input",
+        "description": "Send native macOS clicks or text insertion to a visible WebKit page while restoring editor focus. Target resolves a main-document locator; click uses its center, fill/type click it first. Coordinate click requires viewport x/y. Type inserts text; fill replaces selected field contents. Text insertion emits input events without keyboard events. Use emacs_browser_act for synthesized key presses. Requires native sessions patch.",
+        "inputSchema": {"type": "object", "properties": {
+            "action": {"enum": ["click", "type", "fill"]},
+            "nth": BROWSER_NTH, "page": BROWSER_PAGE, "target": BROWSER_TARGET,
+            "text": {"type": "string"}, "x": {"type": "number", "minimum": 0},
+            "y": {"type": "number", "minimum": 0},
+        }, "required": ["action"], "additionalProperties": False},
+    },
+    {
+        "name": "emacs_browser_dialogs",
+        "description": "Set confirm accept/reject and prompt text/null-cancel responses for the current document. Omitted keys keep their values. Defaults accept confirms and use prompt defaults. Policies reset on navigation. Dialogs are recorded by emacs_browser_console.",
+        "inputSchema": {"type": "object", "properties": {
+            "confirm": {"type": "boolean"}, "page": BROWSER_PAGE,
+            "prompt": {"type": ["string", "null"]},
+        }, "additionalProperties": False},
+    },
+    {
+        "name": "emacs_browser_cookies",
+        "description": "Get, set or clear native profile cookies, including HttpOnly cookies. Get and clear optionally filter by exact name/domain. Set upserts the supplied cookies. Requires the native sessions patch.",
+        "inputSchema": {"type": "object", "properties": {
+            "action": {"enum": ["get", "set", "clear"]},
+            "cookies": {"type": "array", "items": BROWSER_COOKIE},
+            "domain": {"type": "string"}, "name": {"type": "string"}, "page": BROWSER_PAGE,
+        }, "required": ["action"], "additionalProperties": False},
+    },
+    {
+        "name": "emacs_browser_session",
+        "description": "Read a page's profile name/persistence, or clear its profile's cookies, caches and website storage. Clear affects all pages sharing that profile. Requires the native sessions patch.",
+        "inputSchema": {"type": "object", "properties": {
+            "action": {"enum": ["info", "clear"]}, "page": BROWSER_PAGE,
+        }, "required": ["action"], "additionalProperties": False},
+    },
+    {
+        "name": "emacs_browser_storage",
+        "description": "Export profile cookies and the current origin's local/session storage; import a state for the same origin; or clear current-origin local/session storage. Import upserts cookies and replaces local/session storage. IndexedDB is not exported. Cookie values may contain credentials.",
+        "inputSchema": {"type": "object", "properties": {
+            "action": {"enum": ["export", "import", "clear"]}, "page": BROWSER_PAGE,
+            "state": BROWSER_STORAGE_STATE,
+        }, "required": ["action"], "additionalProperties": False},
+    },
+    {
+        "name": "emacs_browser_capabilities",
+        "description": "Read browser engine capabilities, native patch availability, viewport limits, and input/device emulation limitations.",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+    {
+        "name": "emacs_browser_configure",
+        "description": "Set a page's user agent or viewport. Omitted keys keep current settings; null resets them. Changing the user agent reloads the page. Fixed viewports are aspect-fitted into the pane. Requires the native Emacs patches; this does not emulate a mobile OS, touch input, or device pixel ratio.",
+        "inputSchema": {"type": "object", "properties": {
+            "page": BROWSER_PAGE, "user_agent": BROWSER_USER_AGENT, "viewport": BROWSER_VIEWPORT},
+            "additionalProperties": False},
+    },
+    {
         "name": "emacs_browser_open",
-        "description": "Open a URL in an Emacs WebKit page shown beside the user's windows and wait for it to load. Without page, opens a new page; with page, navigates that page. Returns the page ID, URL and title. Use these browser tools instead of Playwright or other browser automation.",
+        "description": "Open a URL in an Emacs WebKit page shown beside the user's windows and wait for it to load. Without page, opens a new page; with page, navigates that page. New pages may use a named profile: persistent=false is isolated in memory, persistent=true survives Emacs restarts. Omitted profile uses the default persistent store. Returns the page ID, URL and title. Use these browser tools instead of Playwright or other browser automation.",
         "inputSchema": {"type": "object", "properties": {"url": {"type": "string"}, "page": BROWSER_PAGE,
-                                                         "hidden": {"type": "boolean", "description": "Open without showing a window."}},
+                                                         "hidden": {"type": "boolean", "description": "Open without showing a window."},
+                                                         "profile": BROWSER_PROFILE,
+                                                         "user_agent": BROWSER_USER_AGENT, "viewport": BROWSER_VIEWPORT},
                         "required": ["url"], "additionalProperties": False},
     },
     {
@@ -150,7 +253,7 @@ BROWSER_TOOLS = [
     },
     {
         "name": "emacs_browser_snapshot",
-        "description": "Read a page as an accessibility-style outline. Interactive elements get refs (e1, e2, ...) for emacs_browser_act; each snapshot replaces earlier refs.",
+        "description": "Read a page as an accessibility-style outline. Interactive elements get refs (e1, e2, ...) for emacs_browser_act; each snapshot replaces earlier refs. Clipped text or omitted descendants set truncated=true; use emacs_browser_get for full text.",
         "inputSchema": {"type": "object", "properties": {
             "page": BROWSER_PAGE,
             "interactive": {"type": "boolean", "description": "List only interactive elements, flat."},
@@ -160,7 +263,7 @@ BROWSER_TOOLS = [
     },
     {
         "name": "emacs_browser_act",
-        "description": "Interact with a page element. Events are synthesized in JavaScript: click, dblclick, hover, focus, fill (replace text), clear, type (key by key; target optional, defaults to the focused element), press (key or combo such as Enter, Shift+Tab, Meta+a), select (options of a <select> by value or label), check, uncheck, scroll (by dx/dy pixels, default one screen down; target optional), scroll_into_view, upload (file paths into a file input). Set snapshot to get an interactive snapshot after the page settles.",
+        "description": "Interact with a page element. Events are synthesized in JavaScript: click, dblclick, hover, focus, fill (replace text), clear, type (key by key; target optional, defaults to the focused element), press (key or combo such as Enter, Shift+Tab, Meta+a), select (options of a <select> by value or label), check, uncheck, scroll (by dx/dy pixels, default one screen down; target optional), scroll_into_view, upload (file paths into a file input). Clicks reject hidden or covered targets. Home/End move the text caret; Shift extends selection. Set snapshot to get an interactive snapshot after the page settles.",
         "inputSchema": {"type": "object", "properties": {
             "action": {"enum": ["click", "dblclick", "hover", "focus", "fill", "clear", "type", "press", "select",
                                 "check", "uncheck", "scroll", "scroll_into_view", "upload"]},
@@ -209,7 +312,7 @@ BROWSER_TOOLS = [
     },
     {
         "name": "emacs_browser_screenshot",
-        "description": "Show a page and capture its window as a PNG image. Needs Screen Recording permission for Emacs.",
+        "description": "Capture the full page viewport as a PNG with one pixel per CSS pixel, including regions outside the visible pane. Does not change windows or need Screen Recording permission. Requires the native snapshot patch.",
         "inputSchema": {"type": "object", "properties": {"page": BROWSER_PAGE}, "additionalProperties": False},
     },
     {
@@ -220,6 +323,16 @@ BROWSER_TOOLS = [
 ]
 TOOLS.extend(BROWSER_TOOLS)
 
+READ_ONLY_TOOLS = frozenset({
+    "emacs_browser_capabilities", "emacs_browser_get", "emacs_browser_list",
+    "emacs_browser_screenshot", "emacs_browser_snapshot", "emacs_context",
+    "emacs_diagnostics", "emacs_documentation_at_point", "emacs_selection_context",
+    "emacs_symbols", "emacs_xref_definitions", "emacs_xref_references",
+})
+for tool in TOOLS:
+    if tool["name"] in READ_ONLY_TOOLS:
+        tool["annotations"] = {"destructiveHint": False, "readOnlyHint": True}
+
 TOOL_NAMES = frozenset(tool["name"] for tool in TOOLS)
 BROWSER_REQUEST_TIMEOUT = 180
 
@@ -228,13 +341,13 @@ def emacs_call(method, arguments):
     arguments = dict(arguments)
     arguments.update(bridge_context())
     payload = base64.b64encode(json.dumps(arguments).encode()).decode()
-    expression = '(emacs-mcp-dispatch "%s" "%s")' % (method, payload)
+    expression = '(base64-encode-string (encode-coding-string (emacs-mcp-dispatch "%s" "%s") \'utf-8) t)' % (method, payload)
     command = [os.environ.get("EMACSCLIENT", "emacsclient"), "-s", os.environ.get("EMACS_SERVER_NAME", "server"), "--eval", expression]
     completed = subprocess.run(command, capture_output=True, text=True)
     if completed.returncode:
         raise RuntimeError(completed.stderr.strip() or completed.stdout.strip() or "emacsclient failed")
-    result = json.loads(completed.stdout.strip())
-    return json.loads(result) if isinstance(result, str) else result
+    encoded_result = json.loads(completed.stdout.strip())
+    return json.loads(base64.b64decode(encoded_result).decode())
 
 
 def agent_identity():
@@ -328,6 +441,12 @@ def handle(message):
             return
         try:
             result = settle(emacs_call(tool.removeprefix("emacs_"), message.get("params", {}).get("arguments", {})))
+            if tool.startswith("emacs_browser_"):
+                for page in result.get("pages", [result]):
+                    url = page.get("url")
+                    if isinstance(url, str) and url.startswith("data:") and len(url) > 160:
+                        page["url"] = url[:160] + "…"
+                        page["url_truncated"] = True
             if "image_path" in result:
                 response(request_id, {"content": [image_content(result.pop("image_path")),
                                                   {"type": "text", "text": json.dumps(result, indent=2)}]})

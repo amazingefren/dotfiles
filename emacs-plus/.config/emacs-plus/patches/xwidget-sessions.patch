@@ -1,0 +1,291 @@
+--- a/src/nsxwidget.h
++++ b/src/nsxwidget.h
+@@ -36,6 +36,8 @@
+ Lisp_Object nsxwidget_webkit_title (struct xwidget *xw);
+ void nsxwidget_webkit_snapshot (struct xwidget *xw, const char *file,
+                                ptrdiff_t callback_index);
++void nsxwidget_webkit_session_command (struct xwidget *xw, const char *request,
++                                      ptrdiff_t callback_index);
+ void nsxwidget_webkit_set_viewport (struct xwidget *xw, int width, int height);
+ void nsxwidget_webkit_set_user_agent (struct xwidget *xw, const char *user_agent);
+ void nsxwidget_webkit_goto_uri (struct xwidget *xw, const char *uri);
+--- a/src/nsxwidget.m
++++ b/src/nsxwidget.m
+@@ -23,6 +23,7 @@
+ #include "blockinput.h"
+ #include "dispextern.h"
+ #include "buffer.h"
++#include "coding.h"
+ #include "frame.h"
+ #include "window.h"
+ #include "nsterm.h"
+@@ -53,6 +54,7 @@
+ <WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler>
+ @property struct xwidget *xw;
+ @property NSSize viewportSize;
++@property(copy) NSString *profileName;
+ /* Map url to whether javascript is blocked by
+    'Content-Security-Policy' sandbox without allow-scripts.  */
+ @property(retain) NSMutableDictionary *urlScriptBlocked;
+@@ -427,6 +429,154 @@
+     }];
+ }
+ 
++/* Returns native session results as JSON through a rooted callback.  */
++void
++nsxwidget_webkit_session_command (struct xwidget *xw, const char *request,
++                                 ptrdiff_t callback_index)
++{
++  XwWebView *view = (XwWebView *) xw->xwWidget;
++  NSString *request_string = [NSString stringWithUTF8String:request];
++  NSError *parse_error = nil;
++  NSDictionary *arguments = [NSJSONSerialization JSONObjectWithData:
++    [request_string dataUsingEncoding:NSUTF8StringEncoding] options:0 error:&parse_error];
++  void (^finish)(id, NSString *) = ^(id value, NSString *failure) {
++    struct xwidget *widget = view.xw;
++    if (!widget || !nsxwidget_is_web_view (widget))
++      return;
++    Lisp_Object callback = AREF (widget->native_callbacks, callback_index);
++    if (NILP (callback))
++      return;
++    NSDictionary *reply = failure ? @{@"error": failure} : @{@"value": value};
++    NSError *json_error = nil;
++    NSData *encoded = [NSJSONSerialization dataWithJSONObject:reply options:0 error:&json_error];
++    NSString *json = encoded ? [[[NSString alloc] initWithData:encoded
++      encoding:NSUTF8StringEncoding] autorelease]
++      : @"{\"error\":\"Cannot serialize native session result\"}";
++    store_xwidget_js_callback_event (widget, callback, [json lispString]);
++    ASET (widget->native_callbacks, callback_index, Qnil);
++  };
++  if (parse_error || ![arguments isKindOfClass:NSDictionary.class])
++    {
++      finish (nil, @"Invalid native session request");
++      return;
++    }
++  NSString *operation = arguments[@"operation"];
++  if (![operation isKindOfClass:NSString.class]
++      || (arguments[@"name"] && ![arguments[@"name"] isKindOfClass:NSString.class])
++      || (arguments[@"domain"] && ![arguments[@"domain"] isKindOfClass:NSString.class]))
++    {
++      finish (nil, @"Session operation and cookie filters must be strings");
++      return;
++    }
++  WKWebsiteDataStore *data_store = view.configuration.websiteDataStore;
++  WKHTTPCookieStore *cookies = data_store.httpCookieStore;
++  if ([operation isEqualToString:@"info"])
++    {
++      finish (@{@"profile":view.profileName, @"persistent":@(data_store.persistent),
++        @"editor_focused":@(view.xw->xv && view.window
++          && view.window.firstResponder == view.xw->xv->emacswindow)}, nil);
++      return;
++    }
++  if ([operation isEqualToString:@"clear_data"])
++    {
++      [data_store removeDataOfTypes:[WKWebsiteDataStore allWebsiteDataTypes]
++        modifiedSince:[NSDate distantPast] completionHandler:^{ finish (@{@"cleared":@YES}, nil); }];
++      return;
++    }
++  if ([operation isEqualToString:@"get_cookies"] || [operation isEqualToString:@"clear_cookies"])
++    {
++      [cookies getAllCookies:^(NSArray<NSHTTPCookie *> *stored) {
++        NSMutableArray *selected = [NSMutableArray array];
++        for (NSHTTPCookie *cookie in stored)
++          {
++            if (arguments[@"name"] && ![cookie.name isEqualToString:arguments[@"name"]])
++              continue;
++            if (arguments[@"domain"] && ![cookie.domain isEqualToString:arguments[@"domain"]])
++              continue;
++            [selected addObject:cookie];
++          }
++        if ([operation isEqualToString:@"clear_cookies"])
++          {
++            dispatch_group_t group = dispatch_group_create ();
++            for (NSHTTPCookie *cookie in selected)
++              {
++                dispatch_group_enter (group);
++                [cookies deleteCookie:cookie completionHandler:^{ dispatch_group_leave (group); }];
++              }
++            dispatch_group_notify (group, dispatch_get_main_queue (), ^{
++              finish (@{@"deleted":@(selected.count)}, nil);
++            });
++            dispatch_release (group);
++            return;
++          }
++        NSMutableArray *values = [NSMutableArray array];
++        for (NSHTTPCookie *cookie in selected)
++          [values addObject:@{@"domain":cookie.domain, @"expires":cookie.expiresDate
++            ? @(cookie.expiresDate.timeIntervalSince1970) : @(-1),
++            @"http_only":@(cookie.HTTPOnly), @"name":cookie.name, @"path":cookie.path,
++            @"same_site":cookie.sameSitePolicy.lowercaseString ?: @"", @"secure":@(cookie.secure),
++            @"value":cookie.value}];
++        finish (@{@"cookies":values}, nil);
++      }];
++      return;
++    }
++  if ([operation isEqualToString:@"set_cookies"])
++    {
++      NSMutableArray *prepared = [NSMutableArray array];
++      if (![arguments[@"cookies"] isKindOfClass:NSArray.class])
++        {
++          finish (nil, @"set_cookies needs a cookies array");
++          return;
++        }
++      for (NSDictionary *value in arguments[@"cookies"])
++        {
++          if (![value isKindOfClass:NSDictionary.class]
++              || ![value[@"domain"] isKindOfClass:NSString.class]
++              || ![value[@"name"] isKindOfClass:NSString.class]
++              || ![value[@"path"] isKindOfClass:NSString.class]
++              || ![value[@"value"] isKindOfClass:NSString.class]
++              || (value[@"same_site"] && ![value[@"same_site"] isKindOfClass:NSString.class])
++              || (value[@"expires"] && ![value[@"expires"] isKindOfClass:NSNumber.class])
++              || (value[@"secure"] && ![value[@"secure"] isKindOfClass:NSNumber.class])
++              || (value[@"http_only"] && ![value[@"http_only"] isKindOfClass:NSNumber.class]))
++            {
++              finish (nil, @"Cookie needs string domain, name, path and value");
++              return;
++            }
++          NSMutableDictionary *properties = [NSMutableDictionary dictionaryWithDictionary:
++            @{NSHTTPCookieDomain:value[@"domain"], NSHTTPCookieName:value[@"name"],
++              NSHTTPCookiePath:value[@"path"], NSHTTPCookieValue:value[@"value"]}];
++          if ([value[@"secure"] boolValue]) properties[NSHTTPCookieSecure] = @"TRUE";
++          if ([value[@"http_only"] boolValue]) properties[@"HttpOnly"] = @"TRUE";
++          if (value[@"same_site"] && [value[@"same_site"] length])
++            properties[NSHTTPCookieSameSitePolicy] = value[@"same_site"];
++          if (value[@"expires"] && [value[@"expires"] doubleValue] >= 0)
++            properties[NSHTTPCookieExpires] = [NSDate dateWithTimeIntervalSince1970:
++              [value[@"expires"] doubleValue]];
++          NSHTTPCookie *cookie = [NSHTTPCookie cookieWithProperties:properties];
++          if (!cookie)
++            {
++              finish (nil, [NSString stringWithFormat:@"Invalid cookie %@ for %@",
++                value[@"name"], value[@"domain"]]);
++              return;
++            }
++          [prepared addObject:cookie];
++        }
++      dispatch_group_t group = dispatch_group_create ();
++      for (NSHTTPCookie *cookie in prepared)
++        {
++          dispatch_group_enter (group);
++          [cookies setCookie:cookie completionHandler:^{ dispatch_group_leave (group); }];
++        }
++      dispatch_group_notify (group, dispatch_get_main_queue (), ^{
++        finish (@{@"set":@(prepared.count)}, nil);
++      });
++      dispatch_release (group);
++      return;
++    }
++  finish (nil, [NSString stringWithFormat:@"Unknown native session operation %@", operation]);
++}
++
+ /* Sets XW's viewport in CSS pixels; zero dimensions restore window sizing.  */
+ void
+ nsxwidget_webkit_set_viewport (struct xwidget *xw, int width, int height)
+@@ -598,18 +748,58 @@
+ - (BOOL) isFlipped { return YES; }
+ @end
+ 
++/* Named profiles share data only with pages using the same profile.  */
++static NSMutableDictionary *xwidget_profiles;
++
+ /* Xwidget model, macOS Cocoa part.  */
+ 
+ void
+ nsxwidget_init (struct xwidget *xw)
+ {
++  WKWebViewConfiguration *configuration =
++    [[[WKWebViewConfiguration alloc] init] autorelease];
++  NSString *profile_name = @"default";
++  Lisp_Object profile_symbol = Fintern (build_string ("xwidget-webkit-profile"), Qnil);
++  Lisp_Object profile = Fboundp (profile_symbol) != Qnil
++    ? Fsymbol_value (profile_symbol) : Qnil;
++  if (!NILP (profile))
++    {
++      CHECK_STRING (profile);
++      NSString *profile_json = [NSString stringWithUTF8String:SSDATA (ENCODE_UTF_8 (profile))];
++      NSDictionary *settings = [NSJSONSerialization JSONObjectWithData:
++        [profile_json dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
++      if (![settings isKindOfClass:NSDictionary.class]
++          || ![settings[@"name"] isKindOfClass:NSString.class]
++          || ![settings[@"name"] length])
++        error ("Invalid xwidget profile settings");
++      profile_name = settings[@"name"];
++      BOOL persistent = [settings[@"persistent"] boolValue];
++      if (!xwidget_profiles)
++        xwidget_profiles = [[NSMutableDictionary alloc] init];
++      WKWebsiteDataStore *store = xwidget_profiles[profile_name];
++      if (store && store.persistent != persistent)
++        error ("Profile persistence cannot change for %s", profile_name.UTF8String);
++      if (!store)
++        {
++          if (persistent)
++            {
++              NSUUID *identifier = [[[NSUUID alloc]
++                initWithUUIDString:settings[@"identifier"]] autorelease];
++              if (!identifier)
++                error ("Persistent profile needs a UUID");
++              store = [WKWebsiteDataStore dataStoreForIdentifier:identifier];
++            }
++          else
++            store = [WKWebsiteDataStore nonPersistentDataStore];
++          xwidget_profiles[profile_name] = store;
++        }
++      configuration.websiteDataStore = store;
++    }
+   block_input ();
+   NSRect rect = NSMakeRect (0, 0, xw->width, xw->height);
+-  xw->xwWidget = [[XwWebView alloc]
+-                   initWithFrame:rect
+-                   configuration:[[[WKWebViewConfiguration alloc] init]
+-                                   autorelease]
+-                         xwidget:xw];
++  xw->xwWidget = [[XwWebView alloc] initWithFrame:rect
++    configuration:configuration xwidget:xw];
++  ((XwWebView *) xw->xwWidget).profileName = profile_name;
+   xw->xwWindow = [[XwWindow alloc]
+                    initWithFrame:rect];
+   [xw->xwWindow setClipsToBounds:YES];
+@@ -634,6 +824,7 @@
+       /* This stops playing audio when a xwidget-webkit buffer is
+          killed.  I could not find other solution.
+          TODO: improve this */
++      ((XwWebView *) xw->xwWidget).profileName = nil;
+       ((XwWebView *) xw->xwWidget).navigationDelegate = nil;
+       ((XwWebView *) xw->xwWidget).UIDelegate = nil;
+       nsxwidget_webkit_goto_uri (xw, "about:blank");
+--- a/src/xwidget.c
++++ b/src/xwidget.c
+@@ -3308,6 +3308,24 @@
+ }
+ 
+ #ifdef NS_IMPL_COCOA
++DEFUN ("xwidget-webkit-session-command", Fxwidget_webkit_session_command,
++       Sxwidget_webkit_session_command, 3, 3, 0,
++       doc: /* Run JSON REQUEST against WebKit XWIDGET's native data store.
++Call CALLBACK with a JSON string containing value or error.
++Supports info, get_cookies, set_cookies, clear_cookies and clear_data.  */)
++  (Lisp_Object xwidget, Lisp_Object request, Lisp_Object callback)
++{
++  WEBKIT_FN_INIT ();
++  CHECK_STRING (request);
++  if (!FUNCTIONP (callback))
++    wrong_type_argument (Qinvalid_function, callback);
++  ptrdiff_t callback_index = save_native_callback (xw, callback);
++  nsxwidget_webkit_session_command (xw, SSDATA (ENCODE_UTF_8 (request)), callback_index);
++  return Qnil;
++}
++#endif
++
++#ifdef NS_IMPL_COCOA
+ DEFUN ("xwidget-webkit-snapshot", Fxwidget_webkit_snapshot,
+        Sxwidget_webkit_snapshot, 3, 3, 0,
+        doc: /* Save WebKit XWIDGET's viewport as a PNG at absolute path FILE.
+@@ -4027,6 +4045,7 @@
+   defsubr (&Sxwidget_webkit_set_viewport);
+   defsubr (&Sxwidget_webkit_set_user_agent);
+   defsubr (&Sxwidget_webkit_snapshot);
++  defsubr (&Sxwidget_webkit_session_command);
+ #endif
+   defsubr (&Sxwidget_webkit_goto_uri);
+   defsubr (&Sxwidget_webkit_goto_history);

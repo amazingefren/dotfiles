@@ -450,8 +450,8 @@ Reject dirty or stale buffers and ambiguous matches before changing anything."
                (default-directory emacs-mcp--request-root)
                (result
                 (pcase method
-                  ((or "laya_submit" "laya_result" "laya_cancel")
-                   (laya-mcp-dispatch method arguments))
+                  ((or "decisions_submit" "decisions_result" "decisions_cancel")
+                   (decisions-mcp-dispatch method arguments))
                   ("context" (emacs-mcp--context arguments))
                   ("handoff_context" (emacs-mcp--handoff-context arguments))
                   ("open_file" (emacs-mcp--open-file arguments))

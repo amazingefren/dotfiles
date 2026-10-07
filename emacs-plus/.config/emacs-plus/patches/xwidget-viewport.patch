@@ -1,0 +1,94 @@
+--- a/src/nsxwidget.h
++++ b/src/nsxwidget.h
+@@ -36,6 +36,7 @@
+ Lisp_Object nsxwidget_webkit_title (struct xwidget *xw);
+ void nsxwidget_webkit_snapshot (struct xwidget *xw, const char *file,
+                                ptrdiff_t callback_index);
++void nsxwidget_webkit_set_viewport (struct xwidget *xw, int width, int height);
+ void nsxwidget_webkit_set_user_agent (struct xwidget *xw, const char *user_agent);
+ void nsxwidget_webkit_goto_uri (struct xwidget *xw, const char *uri);
+ void nsxwidget_webkit_goto_history (struct xwidget *xw, int rel_pos);
+--- a/src/nsxwidget.m
++++ b/src/nsxwidget.m
+@@ -51,6 +51,7 @@
+ @interface XwWebView : WKWebView
+ <WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler>
+ @property struct xwidget *xw;
++@property NSSize viewportSize;
+ /* Map url to whether javascript is blocked by
+    'Content-Security-Policy' sandbox without allow-scripts.  */
+ @property(retain) NSMutableDictionary *urlScriptBlocked;
+@@ -402,6 +403,15 @@
+     }];
+ }
+ 
++/* Sets XW's viewport in CSS pixels; zero dimensions restore window sizing.  */
++void
++nsxwidget_webkit_set_viewport (struct xwidget *xw, int width, int height)
++{
++  XwWebView *web_view = (XwWebView *) xw->xwWidget;
++  web_view.viewportSize = NSMakeSize (width, height);
++  nsxwidget_resize (xw);
++}
++
+ /* Sets XW's user agent; NULL selects WebKit's default.  */
+ void
+ nsxwidget_webkit_set_user_agent (struct xwidget *xw, const char *user_agent)
+@@ -604,8 +614,18 @@
+ {
+   if (xw->xwWidget)
+     {
+-      [xw->xwWindow setFrameSize:NSMakeSize(xw->width, xw->height)];
+-      [xw->xwWidget setFrameSize:NSMakeSize(xw->width, xw->height)];
++      XwWebView *web_view = (XwWebView *) xw->xwWidget;
++      NSSize viewport = web_view.viewportSize;
++      CGFloat scale = 1;
++      if (viewport.width == 0)
++        viewport = NSMakeSize (xw->width, xw->height);
++      else
++        scale = MIN (xw->width / viewport.width,
++                     xw->height / viewport.height);
++      [xw->xwWindow setFrameSize:NSMakeSize (viewport.width * scale,
++                                           viewport.height * scale)];
++      [xw->xwWindow setBoundsSize:viewport];
++      [web_view setFrame:NSMakeRect (0, 0, viewport.width, viewport.height)];
+     }
+ }
+ 
+--- a/src/xwidget.c
++++ b/src/xwidget.c
+@@ -3115,6 +3115,26 @@
+ }
+ 
+ #ifdef NS_IMPL_COCOA
++DEFUN ("xwidget-webkit-set-viewport",
++       Fxwidget_webkit_set_viewport, Sxwidget_webkit_set_viewport,
++       3, 3, 0,
++       doc: /* Set WebKit XWIDGET's WIDTH and HEIGHT in CSS pixels.
++Both dimensions must be integers in 1..4096, or both nil for window sizing.
++The viewport is aspect-fitted into the Emacs window.  */)
++  (Lisp_Object xwidget, Lisp_Object width, Lisp_Object height)
++{
++  WEBKIT_FN_INIT ();
++  int viewport_width = 0;
++  int viewport_height = 0;
++  if (!NILP (width) || !NILP (height))
++    {
++      viewport_width = check_integer_range (width, 1, 4096);
++      viewport_height = check_integer_range (height, 1, 4096);
++    }
++  nsxwidget_webkit_set_viewport (xw, viewport_width, viewport_height);
++  return Qnil;
++}
++
+ DEFUN ("xwidget-webkit-set-user-agent",
+        Fxwidget_webkit_set_user_agent, Sxwidget_webkit_set_user_agent,
+        2, 2, 0,
+@@ -3993,6 +4013,7 @@
+   defsubr (&Sxwidget_webkit_uri);
+   defsubr (&Sxwidget_webkit_title);
+ #ifdef NS_IMPL_COCOA
++  defsubr (&Sxwidget_webkit_set_viewport);
+   defsubr (&Sxwidget_webkit_set_user_agent);
+   defsubr (&Sxwidget_webkit_snapshot);
+ #endif

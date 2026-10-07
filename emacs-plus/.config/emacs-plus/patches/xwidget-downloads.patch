@@ -1,0 +1,130 @@
+--- a/src/nsxwidget.m
++++ b/src/nsxwidget.m
+@@ -51,10 +51,13 @@
+ /* Xwidget webkit.  */
+ 
+ @interface XwWebView : WKWebView
+-<WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler>
++<WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, WKDownloadDelegate>
+ @property struct xwidget *xw;
+ @property NSSize viewportSize;
+ @property(copy) NSString *profileName;
++@property(retain) WKDownload *activeDownload;
++@property(copy) NSString *downloadPath;
++@property(copy) void (^downloadCompletion)(id, NSString *);
+ /* Map url to whether javascript is blocked by
+    'Content-Security-Policy' sandbox without allow-scripts.  */
+ @property(retain) NSMutableDictionary *urlScriptBlocked;
+@@ -305,6 +308,45 @@
+   /* We should do nothing and do not forward (default implementation
+      if we not override here) to let emacs collect key events and ask
+      interpretKeyEvents to its superclass.  */
++}
++
++/* Completes an explicit download and releases its per-page state.  */
++- (void) finishDownload:(NSString *)failure
++{
++  void (^completion)(id, NSString *) = [[self.downloadCompletion copy] autorelease];
++  NSString *path = [[self.downloadPath copy] autorelease];
++  self.activeDownload.delegate = nil;
++  self.activeDownload = nil;
++  self.downloadPath = nil;
++  self.downloadCompletion = nil;
++  if (completion)
++    completion (@{@"path":path}, failure);
++}
++
++- (void) download:(WKDownload *)download
++  decideDestinationUsingResponse:(NSURLResponse *)response
++  suggestedFilename:(NSString *)suggestedFilename
++  completionHandler:(void (^)(NSURL *))completionHandler
++{
++  if ([[NSFileManager defaultManager] fileExistsAtPath:self.downloadPath])
++    {
++      completionHandler (nil);
++      [self finishDownload:[NSString stringWithFormat:@"Download destination exists: %@", self.downloadPath]];
++      return;
++    }
++  completionHandler ([NSURL fileURLWithPath:self.downloadPath]);
++}
++
++- (void) downloadDidFinish:(WKDownload *)download
++{
++  [self finishDownload:nil];
++}
++
++- (void) download:(WKDownload *)download didFailWithError:(NSError *)error
++  resumeData:(NSData *)resumeData
++{
++  [self finishDownload:[NSString stringWithFormat:@"Download %@ failed: %@",
++    self.downloadPath, error.localizedDescription]];
+ }
+ 
+ static NSString *xwScript;
+@@ -470,6 +512,50 @@
+     }
+   WKWebsiteDataStore *data_store = view.configuration.websiteDataStore;
+   WKHTTPCookieStore *cookies = data_store.httpCookieStore;
++  if ([operation isEqualToString:@"download"])
++    {
++      NSString *path = arguments[@"path"];
++      NSURL *url = [arguments[@"url"] isKindOfClass:NSString.class]
++        ? [NSURL URLWithString:arguments[@"url"]] : nil;
++      if (![path isKindOfClass:NSString.class] || !path.isAbsolutePath
++          || !url || ![@[@"http", @"https"] containsObject:url.scheme])
++        {
++          finish (nil, @"Download needs an HTTP(S) URL and an absolute destination path");
++          return;
++        }
++      if (view.downloadCompletion)
++        {
++          finish (nil, @"A download is already pending for this page");
++          return;
++        }
++      if ([[NSFileManager defaultManager] fileExistsAtPath:path])
++        {
++          finish (nil, [NSString stringWithFormat:@"Download destination exists: %@", path]);
++          return;
++        }
++      view.downloadPath = path;
++      view.downloadCompletion = finish;
++      [view startDownloadUsingRequest:[NSURLRequest requestWithURL:url]
++        completionHandler:^(WKDownload *download) {
++          if (!view.xw || !view.downloadCompletion)
++            {
++              [download cancel:^(NSData *resumeData) {}];
++              return;
++            }
++          view.activeDownload = download;
++          download.delegate = view;
++        }];
++      return;
++    }
++  if ([operation isEqualToString:@"cancel_download"])
++    {
++      if (view.activeDownload)
++        [view.activeDownload cancel:^(NSData *resumeData) {}];
++      if (view.downloadCompletion)
++        [view finishDownload:@"Download cancelled"];
++      finish (@{@"cancelled":@YES}, nil);
++      return;
++    }
+   if ([operation isEqualToString:@"info"])
+     {
+       finish (@{@"profile":view.profileName, @"persistent":@(data_store.persistent),
+@@ -824,7 +910,14 @@
+       /* This stops playing audio when a xwidget-webkit buffer is
+          killed.  I could not find other solution.
+          TODO: improve this */
+-      ((XwWebView *) xw->xwWidget).profileName = nil;
++      XwWebView *web_view = (XwWebView *) xw->xwWidget;
++      web_view.activeDownload.delegate = nil;
++      if (web_view.activeDownload)
++        [web_view.activeDownload cancel:^(NSData *resumeData) {}];
++      web_view.activeDownload = nil;
++      web_view.downloadPath = nil;
++      web_view.downloadCompletion = nil;
++      web_view.profileName = nil;
+       ((XwWebView *) xw->xwWidget).navigationDelegate = nil;
+       ((XwWebView *) xw->xwWidget).UIDelegate = nil;
+       nsxwidget_webkit_goto_uri (xw, "about:blank");

@@ -1,0 +1,93 @@
+--- a/src/nsxwidget.m
++++ b/src/nsxwidget.m
+@@ -58,6 +58,7 @@
+ @property(retain) WKDownload *activeDownload;
+ @property(copy) NSString *downloadPath;
+ @property(copy) void (^downloadCompletion)(id, NSString *);
++@property BOOL nativeInputActive;
+ /* Map url to whether javascript is blocked by
+    'Content-Security-Policy' sandbox without allow-scripts.  */
+ @property(retain) NSMutableDictionary *urlScriptBlocked;
+@@ -239,13 +240,15 @@
+ 
+ - (void) mouseDown:(NSEvent *)event
+ {
+-  [self.xw->xv->emacswindow mouseDown:event];
++  if (!self.nativeInputActive)
++    [self.xw->xv->emacswindow mouseDown:event];
+   [super mouseDown:event];
+ }
+ 
+ - (void) mouseUp:(NSEvent *)event
+ {
+-  [self.xw->xv->emacswindow mouseUp:event];
++  if (!self.nativeInputActive)
++    [self.xw->xv->emacswindow mouseUp:event];
+   [super mouseUp:event];
+ }
+ 
+@@ -554,6 +557,64 @@
+       if (view.downloadCompletion)
+         [view finishDownload:@"Download cancelled"];
+       finish (@{@"cancelled":@YES}, nil);
++      return;
++    }
++  if ([operation isEqualToString:@"native_input"])
++    {
++      if (!view.window || !view.xw->xv || view.xw->xv->hidden)
++        {
++          finish (nil, @"Native input needs a visible browser page");
++          return;
++        }
++      NSString *action = arguments[@"action"];
++      NSResponder *original_responder = [[view.window.firstResponder retain] autorelease];
++      view.nativeInputActive = YES;
++      if ([action isEqualToString:@"click"])
++        {
++          if (![arguments[@"x"] isKindOfClass:NSNumber.class]
++              || ![arguments[@"y"] isKindOfClass:NSNumber.class]
++              || !([arguments[@"x"] doubleValue] >= 0 && [arguments[@"x"] doubleValue] < view.bounds.size.width)
++              || !([arguments[@"y"] doubleValue] >= 0 && [arguments[@"y"] doubleValue] < view.bounds.size.height))
++            {
++              view.nativeInputActive = NO;
++              finish (nil, @"Native click needs x/y coordinates inside the viewport");
++              return;
++            }
++          NSPoint point = NSMakePoint ([arguments[@"x"] doubleValue], [arguments[@"y"] doubleValue]);
++          if (!view.isFlipped) point.y = view.bounds.size.height - point.y;
++          NSView *target = [view hitTest:[view.superview convertPoint:point fromView:view]];
++          NSPoint location = [view convertPoint:point toView:nil];
++          for (NSNumber *type in @[@(NSEventTypeLeftMouseDown), @(NSEventTypeLeftMouseUp)])
++            {
++              NSEvent *event = [NSEvent mouseEventWithType:type.integerValue location:location
++                modifierFlags:0 timestamp:NSProcessInfo.processInfo.systemUptime
++                windowNumber:view.window.windowNumber context:nil eventNumber:0 clickCount:1 pressure:1];
++              if (type.integerValue == NSEventTypeLeftMouseDown) [target mouseDown:event];
++              else [target mouseUp:event];
++            }
++        }
++      else if ([action isEqualToString:@"type"] || [action isEqualToString:@"fill"])
++        {
++          if (![arguments[@"text"] isKindOfClass:NSString.class])
++            {
++              view.nativeInputActive = NO;
++              finish (nil, @"Native text insertion needs text");
++              return;
++            }
++          NSView *target = [view hitTest:[view.superview convertPoint:
++            NSMakePoint (view.bounds.size.width / 2, view.bounds.size.height / 2) fromView:view]];
++          [target insertText:arguments[@"text"]];
++        }
++      else
++        {
++          view.nativeInputActive = NO;
++          finish (nil, @"Native input action must be click, type or fill");
++          return;
++        }
++      view.nativeInputActive = NO;
++      [view.window makeFirstResponder:original_responder];
++      [view restoreEditingFocus];
++      finish (@{@"action":action}, nil);
+       return;
+     }
+   if ([operation isEqualToString:@"info"])

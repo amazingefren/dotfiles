@@ -6,6 +6,7 @@
  * installed, and returns it.  `invoke(method, args)` always returns a JSON
  * string: {value}, {error}, or {async: token} for a pending promise, whose
  * outcome `invoke("take", {token})` returns as {value}, {error} or {pending}.
+ * Replies include queued download links in an optional `downloads` array.
  */
 (version) => {
   const installed = window.__webkitAgent;
@@ -40,16 +41,22 @@
   const MODIFIERS = { Alt: 'altKey', Control: 'ctrlKey', Ctrl: 'ctrlKey', Meta: 'metaKey', Shift: 'shiftKey' };
 
   const consoleEntries = installed ? installed.consoleEntries : [];
+  const pendingDownloads = installed?.pendingDownloads ?? [];
   const asyncResults = new Map();
   let refs = new Map();
   let refCount = 0;
   let asyncCount = 0;
+  let snapshotTruncated = false;
 
   /** Returns TEXT with runs of whitespace collapsed and ends trimmed. */
   const normalize = (text) => String(text ?? '').replace(/\s+/g, ' ').trim();
 
   /** Returns TEXT cut to LIMIT characters, marking the cut with an ellipsis. */
-  const truncate = (text, limit) => (text.length > limit ? `${text.slice(0, limit)}…` : text);
+  const truncate = (text, limit) => {
+    if (text.length <= limit) return text;
+    snapshotTruncated = true;
+    return `${text.slice(0, limit)}…`;
+  };
 
   /** Returns TEXT as a double-quoted string cut to LIMIT characters. */
   const quote = (text, limit) => JSON.stringify(truncate(text, limit));
@@ -221,39 +228,43 @@
     return null;
   };
 
-  /** Returns the accessible name of EL with ROLE, at most 120 characters. */
+  /** Returns the accessible name of EL with ROLE, excluding embedded label controls. */
   const accessibleName = (el, role) => {
     const labelledBy = el.getAttribute('aria-labelledby');
     if (labelledBy) {
       const labels = labelledBy.split(/\s+/).map((id) => el.ownerDocument.getElementById(id)).filter(Boolean);
       const text = normalize(labels.map((label) => label.innerText || label.textContent).join(' '));
-      if (text) return truncate(text, 120);
+      if (text) return text;
     }
     const ariaLabel = normalize(el.getAttribute('aria-label'));
-    if (ariaLabel) return truncate(ariaLabel, 120);
+    if (ariaLabel) return ariaLabel;
     if (el.labels?.length) {
-      const text = normalize(Array.from(el.labels, (label) => label.innerText).join(' '));
-      if (text) return truncate(text, 120);
+      const text = normalize(Array.from(el.labels, (label) => {
+        const labelCopy = label.cloneNode(true);
+        for (const control of labelCopy.querySelectorAll('button, input, meter, output, progress, select, textarea, script, style, [hidden], [aria-hidden=true]')) control.remove();
+        return labelCopy.textContent;
+      }).join(' '));
+      if (text) return text;
     }
     if (el.localName === 'input' && ['button', 'reset', 'submit'].includes(el.type)) {
-      return truncate(normalize(el.value) || (el.type === 'reset' ? 'Reset' : el.type === 'submit' ? 'Submit' : ''), 120);
+      return normalize(el.value) || (el.type === 'reset' ? 'Reset' : el.type === 'submit' ? 'Submit' : '');
     }
     if (el.localName === 'img' || el.localName === 'area' || (el.localName === 'input' && el.type === 'image')) {
-      return truncate(normalize(el.getAttribute('alt')), 120);
+      return normalize(el.getAttribute('alt'));
     }
     const caption = { fieldset: 'legend', figure: 'figcaption', table: 'caption' }[el.localName];
     if (caption) {
       const text = normalize(el.querySelector(`:scope > ${caption}`)?.innerText);
-      if (text) return truncate(text, 120);
+      if (text) return text;
     }
     if (NAME_FROM_CONTENT.has(role)) {
       const text = normalize(el.innerText ?? el.textContent);
-      if (text) return truncate(text, 120);
+      if (text) return text;
       const labelled = el.querySelector('[aria-label], img[alt], svg title');
       const inner = normalize(labelled?.getAttribute('aria-label') ?? labelled?.getAttribute('alt') ?? labelled?.textContent);
-      if (inner) return truncate(inner, 120);
+      if (inner) return inner;
     }
-    return truncate(normalize(el.getAttribute('title') || el.getAttribute('placeholder')), 120);
+    return normalize(el.getAttribute('title') || el.getAttribute('placeholder'));
   };
 
   /**
@@ -377,6 +388,7 @@
       const value = node.value ? ` value=${quote(node.value, 120)}` : '';
       const url = node.url ? ` url=${truncate(node.url, 160)}` : '';
       const options = node.options ? ` options=${JSON.stringify(node.options.slice(0, 25))}${node.options.length > 25 ? '…' : ''}` : '';
+      if (node.options?.length > 25) snapshotTruncated = true;
       const onlyText = node.children.length === 1 && node.children[0].text !== undefined && !node.name;
       if (onlyText) {
         lines.push(`${indent}- ${node.role}${tags}${value}${url}${options}: ${quote(node.children[0].text, 300)}`);
@@ -384,6 +396,7 @@
       }
       lines.push(`${indent}- ${node.role}${name}${tags}${value}${url}${options}`);
       if (maxDepth === undefined || depth < maxDepth) renderNodes(node.children, depth + 1, lines, maxDepth);
+      else if (node.children.length) snapshotTruncated = true;
     }
   };
 
@@ -396,12 +409,13 @@
   });
 
   /** Returns the elements LOCATOR (a ref, CSS selector or locator object) matches, visible ones first. */
-  const locate = (locator) => {
+  const locate = (locator, allowDetached = false) => {
     if (typeof locator === 'string') {
       const ref = locator.replace(/^@/, '');
       if (/^e\d+$/.test(ref)) {
         const el = refs.get(ref);
-        if (!el || !el.isConnected) throw new Error(`Ref ${ref} is unknown or stale; take a new snapshot`);
+        if (!el || (!el.isConnected && !allowDetached)) throw new Error(`Ref ${ref} is unknown or stale; take a new snapshot`);
+        if (!el.isConnected) return [];
         return [el];
       }
       return sortVisibleFirst(deepQueryAll(locator));
@@ -501,12 +515,14 @@
     if (el.disabled || el.getAttribute('aria-disabled') === 'true') throw new Error(`${describe(el)} is disabled`);
   };
 
-  /** Clicks EL COUNT times with pointer, mouse and focus events; returns warnings. */
+  /** Clicks EL COUNT times with pointer, mouse and focus events; rejects hidden or covered targets. */
   const clickElement = (el, count = 1) => {
     assertEnabled(el);
+    if (!isVisible(el)) throw new Error(`${describe(el)} is hidden`);
     reveal(el);
     const point = centerOf(el);
     const covered = coveringElement(el, point);
+    if (covered) throw new Error(`${describe(el)} is covered by ${covered}`);
     hoverElement(el, point);
     for (let click = 1; click <= count; click += 1) {
       mouseEvent(el, 'pointerdown', point, { buttons: 1, detail: click });
@@ -517,7 +533,6 @@
       mouseEvent(el, 'click', point, { detail: click });
     }
     if (count === 2) mouseEvent(el, 'dblclick', point, { detail: 2 });
-    return covered ? { covered_by: covered } : {};
   };
 
   /** Focuses EL, scrolling it into view first. */
@@ -539,14 +554,28 @@
     el.dispatchEvent(new (el.ownerDocument.defaultView.InputEvent)('input', { bubbles: true, composed: true, data: value, inputType: 'insertText' }));
   };
 
+  /** Returns EL's editing selection, placing a missing or outside caret at its end. */
+  const editingSelection = (el) => {
+    const selection = el.ownerDocument.getSelection();
+    if (selection.rangeCount && el.contains(selection.anchorNode) && el.contains(selection.focusNode)) return selection;
+    const range = el.ownerDocument.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return selection;
+  };
+
   /** Inserts TEXT at EL's caret as typing would; EL must be focused. */
   const insertText = (el, text) => {
     const doc = el.ownerDocument;
+    if (el.isContentEditable) editingSelection(el);
     if (doc.execCommand('insertText', false, text)) return;
     if (el.isContentEditable) throw new Error(`Could not insert text into ${describe(el)}`);
     const start = el.selectionStart ?? el.value.length;
     const end = el.selectionEnd ?? el.value.length;
     setNativeValue(el, `${el.value.slice(0, start)}${text}${el.value.slice(end)}`);
+    if (el.selectionStart !== null) el.setSelectionRange(start + text.length, start + text.length);
   };
 
   /** Replaces the contents of text field EL with TEXT. */
@@ -554,6 +583,7 @@
     assertEnabled(el);
     if (el.localName === 'select') throw new Error(`${describe(el)} is a select; use the select action`);
     if (!isEditable(el)) throw new Error(`${describe(el)} is not a text field`);
+    if (el.readOnly) throw new Error(`${describe(el)} is read-only`);
     focusElement(el);
     const doc = el.ownerDocument;
     if (el.isContentEditable) {
@@ -642,6 +672,22 @@
       el.ownerDocument.execCommand('delete');
     } else if (key.key === 'Delete' && textField) {
       el.ownerDocument.execCommand('forwardDelete');
+    } else if (['End', 'Home'].includes(key.key) && textField) {
+      if (el.selectionStart !== null && el.selectionStart !== undefined) {
+        const forward = key.key === 'End';
+        const caret = el.selectionDirection === 'backward' ? el.selectionStart : el.selectionEnd;
+        const lineStart = el.localName === 'textarea' && caret > 0 ? el.value.lastIndexOf('\n', caret - 1) + 1 : 0;
+        const nextLine = el.localName === 'textarea' ? el.value.indexOf('\n', caret) : -1;
+        const position = forward ? (nextLine === -1 ? el.value.length : nextLine) : lineStart;
+        const anchor = key.shiftKey
+          ? (el.selectionDirection === 'backward' ? el.selectionEnd : el.selectionStart) : position;
+        el.setSelectionRange(Math.min(anchor, position), Math.max(anchor, position), position < anchor ? 'backward' : 'forward');
+      } else if (el.isContentEditable) {
+        const selection = editingSelection(el);
+        selection.modify(key.shiftKey ? 'extend' : 'move', key.key === 'End' ? 'forward' : 'backward', 'lineboundary');
+      } else {
+        throw new Error(`${describe(el)} does not support caret movement`);
+      }
     } else if (command && key.key.toLowerCase() === 'a' && textField) {
       if (el.select) el.select();
       else el.ownerDocument.execCommand('selectAll');
@@ -707,10 +753,12 @@
 
   /** Returns page and scroll metadata. */
   const pageInfo = () => ({
+    device_pixel_ratio: window.devicePixelRatio,
     ready_state: document.readyState,
     scroll: { x: window.scrollX, y: window.scrollY },
     title: document.title,
     url: location.href,
+    user_agent: navigator.userAgent,
     viewport: { height: window.innerHeight, width: window.innerWidth },
   });
 
@@ -733,8 +781,18 @@
   /** Returns console ARGS formatted as one line. */
   const formatArgs = (args) => args.map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(toJSONValue(arg)))).join(' ');
 
-  /** Records console methods, errors and dialogs once per page; confirm accepts and prompt takes its default. */
+  /** Records console methods, errors and dialogs once per document. */
   const hookPage = () => {
+    if (!window.__webkitAgentDownloadHooked) {
+      window.__webkitAgentDownloadHooked = true;
+      window.addEventListener('click', (event) => {
+        if (event.defaultPrevented) return;
+        const link = event.composedPath().find((node) => node.matches?.('a[download][href]'));
+        if (!link || !/^https?:/.test(link.href)) return;
+        event.preventDefault();
+        window.__webkitAgent.pendingDownloads.push({ filename: link.download, mime_type: '', url: link.href });
+      });
+    }
     if (window.__webkitAgentHooked) return;
     window.__webkitAgentHooked = true;
     for (const level of ['debug', 'error', 'info', 'log', 'warn']) {
@@ -748,11 +806,13 @@
     window.addEventListener('unhandledrejection', (event) => record('error', `Unhandled rejection: ${formatArgs([event.reason])}`));
     window.alert = (message) => record('dialog', `alert: ${message ?? ''}`);
     window.confirm = (message) => {
-      record('dialog', `confirm: ${message ?? ''} -> true`);
-      return true;
+      const answer = window.__webkitAgentDialogPolicy?.confirm ?? true;
+      record('dialog', `confirm: ${message ?? ''} -> ${answer}`);
+      return answer;
     };
     window.prompt = (message, defaultValue) => {
-      const answer = defaultValue ?? '';
+      const policy = window.__webkitAgentDialogPolicy;
+      const answer = policy && Object.hasOwn(policy, 'prompt') ? policy.prompt : defaultValue ?? '';
       record('dialog', `prompt: ${message ?? ''} -> ${JSON.stringify(answer)}`);
       return answer;
     };
@@ -761,7 +821,7 @@
   /** Returns whether wait condition ARGS holds now, with the observed detail. */
   const checkCondition = (args) => {
     if (args.target !== undefined) {
-      const elements = locate(args.target);
+      const elements = locate(args.target, true);
       const state = args.state ?? 'visible';
       const visible = elements.some(isVisible);
       const met = { attached: elements.length > 0, detached: elements.length === 0, hidden: !visible, visible }[state];
@@ -774,7 +834,9 @@
     }
     if (args.url_contains !== undefined) return { detail: location.href, met: location.href.includes(args.url_contains) };
     if (args.function !== undefined) {
-      const value = (0, eval)(args.function);
+      const predicate = (0, eval)(`(${args.function})`);
+      if (typeof predicate !== 'function') throw new Error('function must be a JavaScript function expression');
+      const value = predicate();
       return { detail: JSON.stringify(toJSONValue(value)), met: Boolean(value) };
     }
     const order = ['loading', 'interactive', 'complete'];
@@ -798,8 +860,8 @@
       switch (action) {
         case 'check': setChecked(el, true); break;
         case 'clear': fillElement(el, ''); break;
-        case 'click': Object.assign(result, clickElement(el)); break;
-        case 'dblclick': Object.assign(result, clickElement(el, 2)); break;
+        case 'click': clickElement(el); break;
+        case 'dblclick': clickElement(el, 2); break;
         case 'fill':
           if (typeof args.text !== 'string') throw new Error('fill needs text');
           fillElement(el, args.text);
@@ -836,8 +898,66 @@
       return { entries, total };
     },
 
+    /** Sets confirm and prompt responses for the current document; null cancels a prompt. */
+    dialogs: (args) => {
+      if (args.confirm !== undefined && typeof args.confirm !== 'boolean') throw new Error('confirm must be a boolean');
+      if (args.prompt !== undefined && args.prompt !== null && typeof args.prompt !== 'string') throw new Error('prompt must be a string or null');
+      window.__webkitAgentDialogPolicy = { ...window.__webkitAgentDialogPolicy, ...args };
+      return window.__webkitAgentDialogPolicy;
+    },
+
     /** Evaluates ARGS.script in the page's global scope and returns its completion value. */
     evaluate: (args) => (0, eval)(args.script),
+
+    /** Returns a visible, unobstructed main-document target's box for native input; rejects frame targets. */
+    native_box: (args) => {
+      const el = resolve(args.target, args.nth);
+      if (el.ownerDocument !== document) throw new Error('Native target input currently requires the main document');
+      reveal(el);
+      assertEnabled(el);
+      if (args.action !== 'click' && !elementState(el).editable) throw new Error('Native text insertion requires an editable target');
+      const point = centerOf(el);
+      const cover = coveringElement(el, point);
+      if (cover) throw new Error(`Native target is covered by ${cover}`);
+      const rect = el.getBoundingClientRect();
+      return { height: rect.height, width: rect.width, x: rect.x, y: rect.y };
+    },
+
+    /** Validates the editable page focus and selects field contents for native fill. */
+    native_ready: (args) => {
+      const el = deepActiveElement();
+      if (!el || !elementState(el).editable) throw new Error('Native text insertion requires a focused editable element');
+      if (args.action === 'fill') {
+        if (el.localName === 'input' && !['password', 'search', 'tel', 'text', 'url'].includes(el.type)) throw new Error('Native fill supports text inputs, textareas and contenteditable elements');
+        if (el.isContentEditable) {
+          const range = el.ownerDocument.createRange();
+          range.selectNodeContents(el);
+          const selection = el.ownerDocument.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+        } else el.select();
+      }
+      return true;
+    },
+
+    /** Exports, replaces or clears the current origin's local and session storage; rejects mismatched origins. */
+    storage: (args) => {
+      if (location.origin === 'null') throw new Error('Storage needs an HTTP or HTTPS origin');
+      if (args.action === 'export') return {
+        local_storage: Object.fromEntries(Object.keys(localStorage).map(key => [key, localStorage.getItem(key)])),
+        origin: location.origin,
+        session_storage: Object.fromEntries(Object.keys(sessionStorage).map(key => [key, sessionStorage.getItem(key)])),
+      };
+      if (!['clear', 'import'].includes(args.action)) throw new Error('Storage action must be export, import or clear');
+      if (args.action === 'import' && args.state.origin !== location.origin) throw new Error(`Storage origin ${args.state.origin} does not match ${location.origin}`);
+      localStorage.clear();
+      sessionStorage.clear();
+      if (args.action === 'import') {
+        for (const [key, value] of Object.entries(args.state.local_storage)) localStorage.setItem(key, value);
+        for (const [key, value] of Object.entries(args.state.session_storage)) sessionStorage.setItem(key, value);
+      }
+      return { action: args.action, origin: location.origin };
+    },
 
     /** Returns ARGS.what (url, title, text, html, value, attr, count, box, state, styles) of ARGS.target or the page. */
     get: (args) => {
@@ -886,27 +1006,29 @@
     snapshot: (args) => {
       refs = new Map();
       refCount = 0;
+      snapshotTruncated = false;
       const roots = args.selector ? deepQueryAll(args.selector) : [document.body ?? document.documentElement];
       if (!roots.length) throw new Error(`No element matches ${args.selector}`);
       const context = { cursor: 'auto', interactiveOnly: args.interactive === true, showText: args.interactive !== true, visible: true };
       const nodes = prune(mergeText(roots.flatMap((root) => buildNodes(root, context))));
       const lines = [];
       renderNodes(nodes, 0, lines, args.max_depth);
-      const truncated = lines.length >= MAX_SNAPSHOT_LINES;
-      if (truncated) lines.push('- … truncated; pass selector or max_depth');
+      const lineLimitReached = lines.length >= MAX_SNAPSHOT_LINES;
+      const truncated = snapshotTruncated || lineLimitReached;
+      if (lineLimitReached) lines.push('- … truncated; pass selector or max_depth');
       return { ...pageInfo(), refs: refCount, snapshot: lines.join('\n'), truncated };
     },
   };
 
-  /** Runs METHOD with ARGS and returns the JSON reply described in the file comment. */
-  const invoke = (method, args) => {
+  /** Runs METHOD with ARGS and returns its value, error or pending token. */
+  const invokeMethod = (method, args) => {
     try {
       if (method === 'take') {
         const outcome = asyncResults.get(args.token);
-        if (!outcome) return JSON.stringify({ error: 'The page navigated or reloaded before the script finished' });
-        if (outcome.pending) return JSON.stringify({ pending: true });
+        if (!outcome) return { error: 'The page navigated or reloaded before the script finished' };
+        if (outcome.pending) return { pending: true };
         asyncResults.delete(args.token);
-        return JSON.stringify(outcome);
+        return outcome;
       }
       const handler = methods[method];
       if (!handler) throw new Error(`Unknown method ${method}`);
@@ -919,15 +1041,22 @@
           (resolved) => asyncResults.set(token, { value: toJSONValue(resolved) }),
           (error) => asyncResults.set(token, { error: errorText(error) }),
         );
-        return JSON.stringify({ async: token });
+        return { async: token };
       }
-      return JSON.stringify({ value: toJSONValue(value) });
+      return { value: toJSONValue(value) };
     } catch (error) {
-      return JSON.stringify({ error: errorText(error) });
+      return { error: errorText(error) };
     }
   };
 
-  const agent = { consoleEntries, invoke, version };
+  /** Returns METHOD's JSON reply and drains download links queued in this document. */
+  const invoke = (method, args) => {
+    const reply = invokeMethod(method, args);
+    if (pendingDownloads.length) reply.downloads = pendingDownloads.splice(0);
+    return JSON.stringify(reply);
+  };
+
+  const agent = { consoleEntries, invoke, pendingDownloads, version };
   window.__webkitAgent = agent;
   hookPage();
   return agent;

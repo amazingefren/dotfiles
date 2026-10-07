@@ -79,13 +79,20 @@ left alone with a warning."
     (unless (and (stringp root) (file-directory-p root))
       (user-error "Cannot start Emacs MCP without an agent workspace root"))
     ;; `json-serialize' output is a valid TOML basic string, which Codex's -c values need.
-    (list "-c" (format "mcp_servers.emacs.command=%S" program)
+    (append
+     (list "-c" (format "mcp_servers.emacs.command=%S" program)
           "-c" (format "mcp_servers.emacs.env.EMACS_MCP_WORKSPACE_ROOT=%s"
                        (json-serialize (file-truename root)))
           "-c" (format "mcp_servers.emacs.env.EMACS_MCP_AGENT_NAME=%s"
                        (json-serialize name))
           "-c" (format "mcp_servers.emacs.env.EMACS_MCP_HERDR_SESSION=%s"
-                       (json-serialize session)))))
+                       (json-serialize session)))
+     (mapcan (lambda (tool)
+               (list "-c" (format "mcp_servers.emacs.tools.%s.approval_mode=\"approve\"" tool)))
+             '("emacs_browser_capabilities" "emacs_browser_get" "emacs_browser_list"
+               "emacs_browser_screenshot" "emacs_browser_snapshot" "emacs_context"
+               "emacs_diagnostics" "emacs_documentation_at_point" "emacs_selection_context"
+               "emacs_symbols" "emacs_xref_definitions" "emacs_xref_references")))))
 
 (defun agents--launch-file (session pane suffix data)
   "Write DATA as JSON for SESSION's PANE and return the file's name.

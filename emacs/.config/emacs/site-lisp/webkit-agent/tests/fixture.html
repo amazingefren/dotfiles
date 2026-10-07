@@ -1,0 +1,29 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Browser QA fixture</title>
+<style>
+  body { margin: 0; background: Canvas; color: CanvasText; font-family: sans-serif; }
+  #layout::after { content: 'wide'; }
+  @media (max-width: 600px) { #layout::after { content: 'narrow'; } }
+  #bottom { margin-top: 1800px; }
+</style>
+<h1>Browser QA fixture</h1>
+<div id="layout"></div>
+<label>Name <input id="name"></label>
+<button id="apply" onclick="document.querySelector('#output').textContent = document.querySelector('#name').value">Apply</button>
+<output id="output"></output>
+<label>Enabled <input id="enabled" type="checkbox"></label>
+<label>Choice <select id="choice"><option value="one">One</option><option value="two">Two</option></select></label>
+<label>Upload <input id="upload" type="file"></label>
+<div id="shadow"></div>
+<iframe title="Child" srcdoc="<label>Child input <input id='child'></label>"></iframe>
+<a id="next" href="/next">Next</a>
+<p id="bottom">Bottom</p>
+<script>
+  document.querySelector('#shadow').attachShadow({ mode: 'open' }).innerHTML = '<button id="shadow-button" onclick="this.textContent=\'Clicked\'">Shadow button</button>';
+  document.querySelector('#upload').addEventListener('change', async (event) => {
+    document.querySelector('#output').textContent = await event.target.files[0].text();
+  });
+  console.log('fixture ready');
+</script>

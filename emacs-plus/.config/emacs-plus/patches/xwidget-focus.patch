@@ -1,0 +1,77 @@
+--- a/src/nsxwidget.m
++++ b/src/nsxwidget.m
+@@ -99,11 +99,20 @@
+   return self;
+ }
+ 
++/* Keeps page automation from retaining the editor's keyboard focus.  */
++- (void) restoreEditingFocus
++{
++  if (self.xw && self.xw->xv && self.window
++      && !EQ (WINDOW_BUFFER (XWINDOW (selected_window)), self.xw->buffer))
++    [self.window makeFirstResponder:self.xw->xv->emacswindow];
++}
++
+ /* These 4 functions emulate the behavior of webkit_view_load_changed_cb
+    in the GTK implementation*/
+ - (void) webView:(WKWebView *)webView
+ didFinishNavigation:(WKNavigation *)navigation
+ {
++  [self restoreEditingFocus];
+   if (EQ (Fbuffer_live_p (self.xw->buffer), Qt))
+     store_xwidget_event_string (self.xw, "load-changed", "load-finished");
+ }
+@@ -126,6 +135,7 @@
+ - (void) webView:(WKWebView *)webView
+ didCommitNavigation:(WKNavigation *)navigation
+ {
++  [self restoreEditingFocus];
+   if (EQ (Fbuffer_live_p (self.xw->buffer), Qt))
+     store_xwidget_event_string (self.xw, "load-changed", "load-committed");
+ }
+@@ -241,6 +251,13 @@
+ 
+ - (void) keyDown:(NSEvent *)event
+ {
++  if (self.xw && self.xw->xv
++      && !EQ (WINDOW_BUFFER (XWINDOW (selected_window)), self.xw->buffer))
++    {
++      [self.window makeFirstResponder:self.xw->xv->emacswindow];
++      [self.xw->xv->emacswindow keyDown:event];
++      return;
++    }
+   Lisp_Object var = Fintern (build_string ("isearch-mode"), Qnil);
+   Lisp_Object val = buffer_local_value (var, Fcurrent_buffer ());
+   if (!EQ (val, Qunbound) && !EQ (val, Qnil))
+@@ -259,6 +276,8 @@
+ 
+   [self evaluateJavaScript:@"xwHasFocus()"
+          completionHandler:^(id result, NSError *error) {
++      if (!self.xw || !self.xw->xv)
++        return;
+       if (error)
+         {
+           NSLog (@"xwHasFocus: %@", error);
+@@ -267,8 +286,12 @@
+       else if (result)
+         {
+           NSNumber *hasFocus = result; /* __NSCFBoolean */
+-          if (!hasFocus.boolValue)
+-            [self.xw->xv->emacswindow keyDown:event];
++          if (!hasFocus.boolValue
++              || !EQ (WINDOW_BUFFER (XWINDOW (selected_window)), self.xw->buffer))
++            {
++              [self.window makeFirstResponder:self.xw->xv->emacswindow];
++              [self.xw->xv->emacswindow keyDown:event];
++            }
+           else
+             [super keyDown:event];
+         }
+@@ -545,6 +568,7 @@
+   NSString *javascriptString = [NSString stringWithUTF8String:script];
+   [xwWebView evaluateJavaScript:javascriptString
+               completionHandler:^(id result, NSError *error) {
++      [xwWebView restoreEditingFocus];
+       struct xwidget *widget = xwWebView.xw;
+       if (!widget || callback_index < 0)
+         return;

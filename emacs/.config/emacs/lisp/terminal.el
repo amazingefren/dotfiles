@@ -31,12 +31,15 @@
     (ghostel-open-link-at-click event)))
 
 (defun terminal-enable-evil-ghostel ()
-  "Enable terminal-first Evil behavior in the current Ghostel buffer."
+  "Enables terminal input and shifted-arrow forwarding in the current Ghostel buffer."
   (require 'evil-ghostel)
   (evil-ghostel-mode 1)
   (setq-local evil-ghostel--escape-mode 'terminal)
   (evil-local-set-key 'insert (kbd "<escape>") #'evil-ghostel--escape)
-  (evil-local-set-key 'emacs (kbd "<escape>") #'evil-ghostel--escape))
+  (evil-local-set-key 'emacs (kbd "<escape>") #'evil-ghostel--escape)
+  (dolist (state '(insert emacs))
+    (dolist (key '("S-<left>" "S-<right>"))
+      (evil-local-set-key state (kbd key) #'ghostel--send-event))))
 
 (use-package evil-ghostel
   :after (ghostel evil)

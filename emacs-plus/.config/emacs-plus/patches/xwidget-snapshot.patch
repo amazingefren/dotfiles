@@ -1,0 +1,152 @@
+--- a/src/nsxwidget.h
++++ b/src/nsxwidget.h
+@@ -34,6 +34,8 @@
+ bool nsxwidget_is_web_view (struct xwidget *xw);
+ Lisp_Object nsxwidget_webkit_uri (struct xwidget *xw);
+ Lisp_Object nsxwidget_webkit_title (struct xwidget *xw);
++void nsxwidget_webkit_snapshot (struct xwidget *xw, const char *file,
++                               ptrdiff_t callback_index);
+ void nsxwidget_webkit_set_user_agent (struct xwidget *xw, const char *user_agent);
+ void nsxwidget_webkit_goto_uri (struct xwidget *xw, const char *uri);
+ void nsxwidget_webkit_goto_history (struct xwidget *xw, int rel_pos);
+--- a/src/nsxwidget.m
++++ b/src/nsxwidget.m
+@@ -343,6 +343,65 @@
+   return [xwWebView.title lispString];
+ }
+ 
++/* Captures XW's entire viewport into FILE and completes CALLBACK_INDEX.  */
++void
++nsxwidget_webkit_snapshot (struct xwidget *xw, const char *file,
++                          ptrdiff_t callback_index)
++{
++  XwWebView *web_view = (XwWebView *) xw->xwWidget;
++  int width = web_view.bounds.size.width;
++  int height = web_view.bounds.size.height;
++  NSString *path = [NSString stringWithUTF8String:file];
++  WKSnapshotConfiguration *configuration =
++    [[[WKSnapshotConfiguration alloc] init] autorelease];
++  configuration.rect = web_view.bounds;
++  configuration.snapshotWidth = @(width);
++  [web_view takeSnapshotWithConfiguration:configuration
++                       completionHandler:^(NSImage *image, NSError *error) {
++      struct xwidget *widget = web_view.xw;
++      if (!widget || !nsxwidget_is_web_view (widget))
++        return;
++      Lisp_Object callback = AREF (widget->native_callbacks, callback_index);
++      if (NILP (callback))
++        return;
++      NSString *failure = nil;
++      if (error || !image)
++        failure = [NSString stringWithFormat:@"Snapshot %@ failed: %@", path,
++                    error ? error.localizedDescription : @"No image returned"];
++      else
++        {
++          NSBitmapImageRep *bitmap = [[[NSBitmapImageRep alloc]
++            initWithBitmapDataPlanes:NULL pixelsWide:width pixelsHigh:height
++            bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
++            colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:0 bitsPerPixel:0]
++            autorelease];
++          if (!bitmap)
++            failure = [NSString stringWithFormat:@"Cannot allocate snapshot %@", path];
++          else
++            {
++              [NSGraphicsContext saveGraphicsState];
++              [NSGraphicsContext setCurrentContext:
++                [NSGraphicsContext graphicsContextWithBitmapImageRep:bitmap]];
++              [image drawInRect:NSMakeRect (0, 0, width, height)
++                      fromRect:NSZeroRect operation:NSCompositingOperationCopy
++                      fraction:1.0];
++              [NSGraphicsContext restoreGraphicsState];
++              NSData *png = [bitmap representationUsingType:NSBitmapImageFileTypePNG
++                                                properties:@{}];
++              NSError *write_error = nil;
++              if (!png || ![png writeToFile:path options:NSDataWritingAtomic
++                                     error:&write_error])
++                failure = [NSString stringWithFormat:@"Cannot write snapshot %@: %@",
++                            path, write_error ? write_error.localizedDescription
++                                              : @"PNG encoding failed"];
++            }
++        }
++      store_xwidget_js_callback_event
++        (widget, callback, failure ? [failure lispString] : Qnil);
++      ASET (widget->native_callbacks, callback_index, Qnil);
++    }];
++}
++
+ /* Sets XW's user agent; NULL selects WebKit's default.  */
+ void
+ nsxwidget_webkit_set_user_agent (struct xwidget *xw, const char *user_agent)
+@@ -524,11 +583,15 @@
+       /* This stops playing audio when a xwidget-webkit buffer is
+          killed.  I could not find other solution.
+          TODO: improve this */
++      ((XwWebView *) xw->xwWidget).navigationDelegate = nil;
++      ((XwWebView *) xw->xwWidget).UIDelegate = nil;
+       nsxwidget_webkit_goto_uri (xw, "about:blank");
+ 
+       [((XwWebView *) xw->xwWidget).urlScriptBlocked release];
+       [xw->xwWidget removeFromSuperviewWithoutNeedingDisplay];
+ 
++      ((XwWebView *) xw->xwWidget).xw = NULL;
++      xw->native_callbacks = Qnil;
+       [xw->xwWidget release];
+       [xw->xwWindow removeFromSuperviewWithoutNeedingDisplay];
+       [xw->xwWindow release];
+--- a/src/xwidget.c
++++ b/src/xwidget.c
+@@ -3267,6 +3267,34 @@
+   return Qnil;
+ }
+ 
++#ifdef NS_IMPL_COCOA
++DEFUN ("xwidget-webkit-snapshot", Fxwidget_webkit_snapshot,
++       Sxwidget_webkit_snapshot, 3, 3, 0,
++       doc: /* Save WebKit XWIDGET's viewport as a PNG at absolute path FILE.
++Call CALLBACK with nil on success or an error string on failure.
++The image has one pixel per viewport point and includes clipped regions.  */)
++  (Lisp_Object xwidget, Lisp_Object file, Lisp_Object callback)
++{
++  WEBKIT_FN_INIT ();
++  CHECK_STRING (file);
++  if (!FUNCTIONP (callback))
++    wrong_type_argument (Qinvalid_function, callback);
++
++  Lisp_Object callbacks = xw->native_callbacks;
++  if (NILP (callbacks))
++    xw->native_callbacks = callbacks = make_nil_vector (4);
++  ptrdiff_t index;
++  for (index = 0; index < ASIZE (callbacks); index++)
++    if (NILP (AREF (callbacks, index)))
++      break;
++  if (index == ASIZE (callbacks))
++    xw->native_callbacks = callbacks = larger_vector (callbacks, 1, -1);
++  ASET (callbacks, index, callback);
++  nsxwidget_webkit_snapshot (xw, SSDATA (ENCODE_UTF_8 (file)), index);
++  return Qnil;
++}
++#endif
++
+ DEFUN ("xwidget-resize", Fxwidget_resize, Sxwidget_resize, 3, 3, 0,
+        doc: /* Resize XWIDGET to NEW_WIDTH, NEW_HEIGHT.  */ )
+   (Lisp_Object xwidget, Lisp_Object new_width, Lisp_Object new_height)
+@@ -3966,6 +3994,7 @@
+   defsubr (&Sxwidget_webkit_title);
+ #ifdef NS_IMPL_COCOA
+   defsubr (&Sxwidget_webkit_set_user_agent);
++  defsubr (&Sxwidget_webkit_snapshot);
+ #endif
+   defsubr (&Sxwidget_webkit_goto_uri);
+   defsubr (&Sxwidget_webkit_goto_history);
+--- a/src/xwidget.h
++++ b/src/xwidget.h
+@@ -62,6 +62,9 @@
+ 
+   /* A title used for button labels, for instance.  */
+   Lisp_Object title;
++
++  /* Vector of pending native callbacks.  */
++  Lisp_Object native_callbacks;
+ 
+   /* Vector of currently executing scripts with callbacks.  */
+   Lisp_Object script_callbacks;
