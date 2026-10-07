@@ -4,6 +4,8 @@ import io
 import json
 import subprocess
 import sys
+import threading
+import time
 import types
 import unittest
 import urllib.error
@@ -144,6 +146,36 @@ class WorkerTests(unittest.TestCase):
         self.assertNotIn("very-secret", json.dumps(response))
         self.assertEqual(seen[0][0].full_url, worker.JEV_URL)
         self.assertEqual(seen[0][1], 30)
+
+    def test_serve_runs_jev_requests_concurrently(self):
+        both_in_flight = threading.Barrier(2, timeout=5)
+
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *args): return None
+            def read(self, amount): return b'{"model":"jev-1.13.0","answers":{"x":{"type":"noul","noul":0.7}}}'
+
+        def open_url(req, timeout):
+            # Passes only with both requests in flight.
+            both_in_flight.wait()
+            return Response()
+
+        self.worker.opener = open_url
+        requests = [{"op": "configure", "jev_api_key": "key"}]
+        for request_id in ("a", "b"):
+            req = self.req()
+            req.update(id=request_id, backend="jev")
+            requests.append(req)
+        source = io.BytesIO("".join(json.dumps(r) + "\n" for r in requests).encode())
+        out = io.StringIO()
+        worker.serve(self.worker, source, out)
+        deadline = time.monotonic() + 5
+        while out.getvalue().count("\n") < 3 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        lines = [json.loads(line) for line in out.getvalue().splitlines()]
+        self.assertEqual(lines[0], {"event": "ready", "protocol": 1})
+        self.assertEqual(sorted(line["id"] for line in lines[1:]), ["a", "b"])
+        self.assertTrue(all(line["ok"] for line in lines[1:]))
 
     def test_choice_list_normalizes_for_both_backends(self):
         req = self.req()

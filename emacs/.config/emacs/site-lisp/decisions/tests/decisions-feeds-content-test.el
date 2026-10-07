@@ -51,6 +51,13 @@
       (setf (elfeed-entry-content-type entry) 'html)
       (should (equal (gethash "content" (decisions-feeds--state entry)) "")))))
 
+(ert-deftest decisions-feeds-clips-long-content-to-the-limit ()
+  (let ((decisions-feeds-max-content-characters 10)
+        (entry (decisions-feeds-test--entry "long" 100)))
+    (setf (elfeed-entry-content entry) "0123456789abcdef"
+          (elfeed-entry-content-type entry) 'text)
+    (should (equal (gethash "content" (decisions-feeds--state entry)) "0123456789"))))
+
 (ert-deftest decisions-feeds-displays-undetermined-below-useful-saved-content ()
   (decisions-feeds-test--isolated
     (let ((uncertain (decisions-feeds-test--entry "Teaser" 200))

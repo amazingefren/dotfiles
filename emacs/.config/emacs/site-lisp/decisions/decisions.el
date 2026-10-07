@@ -2,6 +2,7 @@
 
 (require 'cl-lib)
 (require 'json)
+(require 'seq)
 (require 'subr-x)
 (require 'auth-source)
 
@@ -12,10 +13,17 @@
 (defcustom decisions-mlx-model "mlx-community/clef-flash-8bit" "Default local checkpoint." :type 'string)
 (defcustom decisions-laya-model "aac6fef/laya-mlx" "Local Laya checkpoint." :type 'string)
 (defcustom decisions-jev-model "jev-1.13.0" "Default remote model." :type 'string)
+(defcustom decisions-default-backend "mlx"
+  "Backend for requests that name none: \"mlx\" and \"laya\" run locally, \"jev\" calls TypeSafe."
+  :type '(choice (const "mlx") (const "laya") (const "jev")))
 (defcustom decisions-jev-key-function #'decisions--default-jev-key
   "Function returning a TypeSafe API key only when a Jev job runs."
   :type 'function)
 (defcustom decisions-max-queue 64 "Maximum pending requests." :type 'integer)
+(defcustom decisions-jev-concurrency 10
+  "Maximum Jev requests in flight at once.  Local backends run one request at a time.
+TypeSafe's limit is 80 requests per second; a request takes about 150 ms."
+  :type 'natnum)
 (defcustom decisions-max-request-bytes 1000000 "Maximum UTF-8 request size." :type 'integer)
 (defcustom decisions-retained-jobs 100 "Maximum completed jobs retained in memory." :type 'integer)
 (defcustom decisions-request-timeout 300 "Seconds allowed for one worker operation." :type 'number)
@@ -30,7 +38,8 @@
 (defvar decisions--jobs (make-hash-table :test #'equal))
 (defvar decisions--completed nil)
 (defvar decisions--queue nil)
-(defvar decisions--active nil)
+(defvar decisions--active nil
+  "Jobs sent to the worker and not yet answered, newest first.")
 (defvar decisions--process nil)
 (defvar decisions--stderr-process nil)
 (defvar decisions--ready nil)
@@ -129,8 +138,8 @@
 (defun decisions--finish (job status &optional result error-object)
   "Records JOB's terminal STATUS with RESULT or ERROR-OBJECT once."
   (unless (member (decisions--job-status job) '("succeeded" "failed" "cancelled"))
-    ;; A cancelled active job still holds the worker's only request slot.
-    (unless (and (equal status "cancelled") (eq job decisions--active))
+    ;; A cancelled active job still holds a worker request slot.
+    (unless (and (equal status "cancelled") (memq job decisions--active))
       (decisions--clear-job-timer job))
     (setf (decisions--job-status job) status
           (decisions--job-result job) result
@@ -172,14 +181,17 @@
                                     (decisions-stop)))))))
 
 (defun decisions--dispatch-next ()
-  "Sends the next queued job to a ready worker and records dispatch errors."
-  (when (and decisions--ready (null decisions--active) decisions--queue)
+  "Sends queued jobs to a ready worker while it has capacity and records dispatch errors.
+Jev jobs share the worker up to `decisions-jev-concurrency'; any other job runs alone."
+  (while (and decisions--ready decisions--queue (decisions--can-dispatch-p (car decisions--queue)))
     (decisions--cancel-idle)
-    (let ((job (pop decisions--queue)))
-      (setq decisions--active job)
-      (condition-case err
+    (let ((job (pop decisions--queue))
+          (settled nil))
+      (push job decisions--active)
+      (unwind-protect
+       (condition-case err
           (progn
-            (when (equal (gethash "backend" (decisions--job-request job)) "jev")
+            (when (decisions--jev-job-p job)
               (let ((key (funcall decisions-jev-key-function)))
                 (unless (and (stringp key) (not (string-empty-p key)))
                   (error "No TypeSafe API key configured"))
@@ -191,19 +203,41 @@
               (decisions--write wire))
             (setf (decisions--job-timer job)
                   (run-at-time decisions-request-timeout nil #'decisions--timeout
-                               (decisions--job-id job))))
+                               (decisions--job-id job)))
+            (setq settled t))
         (error
+         (setq decisions--active (delq job decisions--active)
+               settled t)
          (decisions--finish job "failed" nil
-                       (decisions--error "dispatch" (error-message-string err)))
-         (setq decisions--active nil)
-         (decisions--dispatch-next))))))
+                       (decisions--error "dispatch" (error-message-string err)))))
+       ;; A quit, such as C-g at a key prompt, returns the job to the queue's head.
+       (unless settled
+         (setq decisions--active (delq job decisions--active))
+         (setf (decisions--job-status job) "queued")
+         (push job decisions--queue))))))
+
+(defun decisions--can-dispatch-p (job)
+  "Returns non-nil when JOB may start alongside the active jobs."
+  (if (decisions--jev-job-p job)
+      (and (seq-every-p #'decisions--jev-job-p decisions--active)
+           (< (length decisions--active) (max 1 decisions-jev-concurrency)))
+    (null decisions--active)))
+
+(defun decisions--jev-job-p (job)
+  "Returns non-nil when JOB evaluates on the Jev backend."
+  (and (null (decisions--job-op job))
+       (equal (gethash "backend" (decisions--job-request job)) "jev")))
 
 (defun decisions--timeout (id)
   "Fails active ID and stops its worker when its deadline expires."
-  (when (and decisions--active (equal id (decisions--job-id decisions--active)))
-    (decisions--finish decisions--active "failed" nil
+  (when-let* ((job (decisions--active-job id)))
+    (decisions--finish job "failed" nil
                   (decisions--error "timeout" "Decisions worker request timed out"))
     (decisions--worker-failed "Decisions worker stopped after a timeout")))
+
+(defun decisions--active-job (id)
+  "Returns the active job with ID, or nil."
+  (seq-find (lambda (job) (equal id (decisions--job-id job))) decisions--active))
 
 (defun decisions--handle-line (line)
   "Handles one JSON LINE; fails the worker on invalid protocol replies."
@@ -224,8 +258,8 @@
             (cancel-timer decisions--startup-timer) (setq decisions--startup-timer nil))
           (decisions--dispatch-next)
           (decisions--schedule-idle))
-         ((and decisions--active (equal id (decisions--job-id decisions--active)))
-          (let* ((job decisions--active)
+         ((decisions--active-job id)
+          (let* ((job (decisions--active-job id))
                  (ok (gethash "ok" message))
                  (result (gethash "result" message))
                  (failure (gethash "error" message)))
@@ -242,7 +276,7 @@
                 (error "Worker failure is missing error details")))
              (t (error "Worker reply has no valid ok field")))
             (decisions--clear-job-timer job)
-            (setq decisions--active nil)
+            (setq decisions--active (delq job decisions--active))
             (if (eq ok t)
                 (decisions--finish job "succeeded" result)
               (decisions--finish job "failed" nil failure))
@@ -280,10 +314,10 @@
   (when (process-live-p decisions--stderr-process)
     (delete-process decisions--stderr-process))
   (setq decisions--stderr-process nil)
-  (when decisions--active
-    (decisions--clear-job-timer decisions--active)
-    (decisions--finish decisions--active "failed" nil (decisions--error "worker" message))
-    (setq decisions--active nil))
+  (dolist (job decisions--active)
+    (decisions--clear-job-timer job)
+    (decisions--finish job "failed" nil (decisions--error "worker" message)))
+  (setq decisions--active nil)
   (dolist (job decisions--queue)
     (decisions--finish job "failed" nil (decisions--error "worker" message)))
   (setq decisions--queue nil))
@@ -334,7 +368,7 @@
   (let ((status (decisions--object "process" (if (process-live-p decisions--process)
                                             (if decisions--ready "ready" "starting") "stopped")
                               "queued" (length decisions--queue)
-                              "active" (or (and decisions--active (decisions--job-id decisions--active)) :null))))
+                              "active" (vconcat (mapcar #'decisions--job-id (reverse decisions--active))))))
     (when (called-interactively-p 'interactive)
       (message "Decisions: %s, %s queued" (gethash "process" status)
                (gethash "queued" status)))
@@ -358,7 +392,7 @@
   "Queues local BACKEND's MODEL and returns its job ID.
 Raises for remote backends or a full queue.  May download model weights."
   (interactive)
-  (let ((backend (or backend "mlx")))
+  (let ((backend (or backend decisions-default-backend)))
     (unless (member backend '("mlx" "laya")) (error "Cannot warm remote backend: %s" backend))
     (let* ((id (format "decisions-%d-%d" (time-convert nil 'integer)
                        (cl-incf decisions--serial)))
@@ -368,7 +402,7 @@ Raises for remote backends or a full queue.  May download model weights."
                                                       decisions-mlx-model))))
            (job (decisions--make-job :id id :op "warm" :request request
                                   :status "queued" :created-at (decisions--now))))
-      (when (>= (+ (length decisions--queue) (if decisions--active 1 0)) decisions-max-queue)
+      (when (>= (+ (length decisions--queue) (length decisions--active)) decisions-max-queue)
         (error "Decisions queue is full"))
       (puthash id job decisions--jobs)
       (setq decisions--queue (append decisions--queue (list job)))
@@ -377,18 +411,24 @@ Raises for remote backends or a full queue.  May download model weights."
       (decisions--dispatch-next)
       id)))
 
+(defun decisions--model (backend)
+  "Returns the configured model for BACKEND.
+Signals an error for an unknown BACKEND."
+  (pcase backend
+    ("mlx" decisions-mlx-model)
+    ("laya" decisions-laya-model)
+    ("jev" decisions-jev-model)
+    (_ (error "Unknown Decisions backend: %s" backend))))
+
 (cl-defun decisions-submit (state questions &key backend model revision
                             allow-truncation callback owner)
   "Queue typed QUESTIONS over STATE and return a job id.
 CALLBACK receives one completed snapshot on a later timer tick.  OWNER must
 match exactly on subsequent result and cancellation calls."
-  (let* ((backend (if (symbolp backend) (symbol-name (or backend 'mlx))
-                    (or backend "mlx")))
-         (model (or model (pcase backend
-                            ("mlx" decisions-mlx-model)
-                            ("laya" decisions-laya-model)
-                            ("jev" decisions-jev-model)
-                            (_ (error "Unknown Decisions backend: %s" backend)))))
+  (let* ((backend (cond ((null backend) decisions-default-backend)
+                        ((symbolp backend) (symbol-name backend))
+                        (t backend)))
+         (model (or model (decisions--model backend)))
          (request (decisions--object "state" state "questions" questions
                                 "backend" backend "model" model
                                 "allow_truncation" (if allow-truncation t :false)))
@@ -402,7 +442,7 @@ match exactly on subsequent result and cancellation calls."
     (when (> (string-bytes (json-serialize request :null-object :null :false-object :false))
              decisions-max-request-bytes)
       (error "Decisions request exceeds size limit"))
-    (when (>= (+ (length decisions--queue) (if decisions--active 1 0)) decisions-max-queue)
+    (when (>= (+ (length decisions--queue) (length decisions--active)) decisions-max-queue)
       (error "Decisions queue is full"))
     (let ((job (decisions--make-job :id id :owner owner :request request
                                 :callback callback :status "queued"

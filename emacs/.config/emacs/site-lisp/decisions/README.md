@@ -3,8 +3,8 @@
 A programmable harness for typed decisions, with local Clef and Laya backends,
 an optional Jev backend, an editable playground, and scoped agent tools.
 It returns probabilities and scores without generating text.
-This Emacs config queues Clef-flash loading after two seconds of startup idle
-time and keeps the model resident until `M-x decisions-stop` or Emacs exits.
+Models load on first use (or `M-x decisions-warm`) and stay resident until
+`M-x decisions-stop` or Emacs exits.
 
 ## Bootstrap each machine
 
@@ -34,7 +34,9 @@ inference uses additional memory.
 
 MLX requires Apple Silicon and macOS 14 or later. On another platform,
 `M-x decisions-bootstrap-jev` prepares the Python worker for Jev without installing
-MLX or downloading weights. Backend selection remains explicit.
+MLX or downloading weights. A request without `backend` uses
+`decisions-default-backend` (`mlx` unless customized); set it to `jev` on a
+machine without the memory for local models.
 
 If you need dependencies without the initial checkpoint download, use the
 shell command with `--no-model`. The checkpoint is then downloaded on the first
@@ -164,8 +166,8 @@ Changing the selected task or editing its notes discards stale results.
 ## Ranked feeds
 
 `SPC d f` opens `*Decisions feeds*` with read and unread entries from the last
-two weeks in this Emacs config. `decisions-feeds-default-filter` sets the initial
-filter. Publication days use the local time zone and appear newest first.
+two weeks, excluding the Papers tag, in this Emacs config.
+`decisions-feeds-default-filter` sets the initial filter. Publication days use the local time zone and appear newest first.
 Recommendations sort highest first within each day. Rows retain Elfeed's date,
 title, feed, tags, and unread styling, with an explicit read/unread column.
 Each scored row adds its recommendation, confidence, and reading value:
@@ -187,7 +189,7 @@ whole matching collection. The selected article stays selected when rows move.
 | --- | --- |
 | `RET` | Read the article in Elfeed and mark it read |
 | `C-u RET` | Preview without marking read |
-| `b` / `B` | Open in the embedded / external browser |
+| `b` / `B` | Open in the embedded / external browser and mark it read (`C-u` keeps it unread) |
 | `r` / `u` | Mark read / unread |
 | `*` | Toggle star |
 | `s` | Set this view's Elfeed filter |
@@ -197,11 +199,11 @@ whole matching collection. The selected article stays selected when rows move.
 | `C-c C-k` | Stop classification |
 | `q` | Stop classification and close the window |
 
-Filters affect this view only. Cached predictions stay in its buffer and
-are reused across refreshes and filter changes. Article content, metadata,
-model, content type, and reading criteria changes invalidate a prediction.
-Read/unread changes retain its recommendation.
-Killing the view drops its cache. Classification reads stored RSS content as
+Filters affect this view only. Predictions are saved with `ae-store` (SQLite,
+see `ae-store-file`) and reused across refreshes, filter changes and restarts.
+Article content, metadata, backend, model, content type, and reading criteria
+changes invalidate a prediction. Read/unread changes retain its recommendation.
+Classification reads stored RSS content as
 plain text, strips HTML markup, scripts, and styles, and does not download
 images or fetch full webpages. Some feeds store only summaries. Classification
 does not change tags or read status. Explicit reading and tagging commands
@@ -304,7 +306,8 @@ destructive writes, and comments that steer, mislead, or narrate. None of
 them reason across the whole diff: logic bugs, races, and design problems
 need a reviewer that reads everything.
 
-`"backend"` picks the model, and `"backends"` holds per-backend budgets:
+`"backend"` picks the model, defaulting to `decisions-default-backend`, and
+`"backends"` holds per-backend budgets:
 
 ```json
 "backend": "mlx",
@@ -369,6 +372,12 @@ automatically.
 Set `"backend": "jev"` in a request. The default model is the pinned
 `jev-1.13.0`; use a different version in `model` or customize `decisions-jev-model`.
 Jev uses model IDs rather than the local `revision` option.
+
+Jev requests run concurrently, up to `decisions-jev-concurrency` (default 10)
+in flight; local requests run one at a time and wait for in-flight Jev requests.
+TypeSafe allows 80 requests per second, and one request takes roughly 150 ms.
+Feed ranking on Jev keeps that many entries in flight and redraws its view at
+most once a second.
 
 The API key is resolved only for a Jev request, from `TYPESAFE_API_KEY` in Emacs's
 environment or `auth-source` with host `api.typesafe.ai`. For an encrypted
@@ -440,7 +449,7 @@ With Elfeed's installed package directory on `load-path`, run the ranked-view
 checks as well:
 
 ```sh
-emacs -Q --batch -L PATH_TO_ELFEED -L emacs/.config/emacs/site-lisp/decisions -l emacs/.config/emacs/site-lisp/decisions/tests/decisions-feeds-daily-test.el -f ert-run-tests-batch-and-exit
+emacs -Q --batch -L PATH_TO_ELFEED -L emacs/.config/emacs/site-lisp/ae-store -L emacs/.config/emacs/site-lisp/decisions -l emacs/.config/emacs/site-lisp/decisions/tests/decisions-feeds-daily-test.el -f ert-run-tests-batch-and-exit
 ```
 
 Unit tests use fake inference and HTTP fixtures; they require neither model

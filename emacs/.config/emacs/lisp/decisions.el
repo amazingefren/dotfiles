@@ -20,7 +20,7 @@
 (use-package decisions-feeds
   :load-path "site-lisp/decisions"
   :ensure nil
-  :custom (decisions-feeds-default-filter "@2-weeks-ago")
+  :custom (decisions-feeds-default-filter "@2-weeks-ago -Papers")
   :commands (decisions-feeds-rank))
 
 (use-package decisions-review
@@ -32,15 +32,6 @@
 (use-package eplot
   :vc (:url "https://github.com/larsmagne/eplot" :rev :newest)
   :defer t)
-
-(defun decisions-startup-warm ()
-  "Queues local model loading after Emacs startup when its runtime exists."
-  (when (file-executable-p
-         (expand-file-name "etc/decisions/venv/bin/python" user-emacs-directory))
-    (decisions-warm)))
-
-(add-hook 'emacs-startup-hook
-          (lambda () (run-with-idle-timer 2 nil #'decisions-startup-warm)))
 
 (leader
   "d" '(:ignore t :wk "decisions")

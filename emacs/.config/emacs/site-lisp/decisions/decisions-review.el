@@ -14,7 +14,7 @@
   "JSON rubric: questions, their risk weights, and optionally backend/model."
   :type 'file)
 (defcustom decisions-review-concurrency 2
-  "Hunks kept submitted at once.  The worker still evaluates them serially."
+  "Hunks kept submitted at once.  Local backends evaluate them serially."
   :type 'integer)
 (defcustom decisions-review-max-hunks 600 "Largest number of review units one review scores." :type 'integer)
 (defcustom decisions-review-max-state-characters 12000
@@ -519,7 +519,7 @@ over that state: \"code\" (the default) or \"comments\"."
 
 (defun decisions-review--setting (rubric key default)
   "Return RUBRIC's KEY for its backend, from backends.<backend>, or DEFAULT."
-  (let ((settings (gethash (gethash "backend" rubric "mlx")
+  (let ((settings (gethash (gethash "backend" rubric decisions-default-backend)
                            (gethash "backends" rubric (make-hash-table :test #'equal)))))
     (or (and (hash-table-p settings) (gethash key settings)) default)))
 
@@ -631,7 +631,7 @@ such as live edit followers."
              (mapcar
               (pcase-lambda (`(,kind ,state ,questions))
                 (decisions-submit state questions
-                             :backend (gethash "backend" rubric "mlx")
+                             :backend (gethash "backend" rubric decisions-default-backend)
                              :model (and (stringp model) model)
                              :revision (let ((revision (gethash "revision" rubric)))
                                          (and (stringp revision) revision))
@@ -723,13 +723,10 @@ expects every question it is asked to answer false."
                           (mean 5 6) (mean 7 8)
                           (if (> (aref row 4) 0) (format "  (%d not asked)" (aref row 4)) ""))
                   lines))))
-      (let ((backend (gethash "backend" rubric "mlx")))
+      (let ((backend (gethash "backend" rubric decisions-default-backend)))
         (concat
          (format "Decisions review eval  %s · %s · %d cases · %.1fs\n"
-                 backend (gethash "model" rubric (pcase backend
-                                           ("jev" decisions-jev-model)
-                                           ("laya" decisions-laya-model)
-                                           (_ decisions-mlx-model)))
+                 backend (gethash "model" rubric (decisions--model backend))
                  (length cases) seconds)
          (format "recall %.0f%%  precision %.0f%%  at P >= 0.5\n\n"
                  (/ (* 100.0 caught) (max 1 bad))
@@ -834,7 +831,7 @@ given, receives the report text instead of a buffer."
                  (expect (gethash "control_expect" lint)))
              (concat
               (format "Decisions rubric lint  %s · %d questions + %d controls · P >= 0.5 flags\n\n"
-                      (gethash "backend" rubric "mlx") (hash-table-count (gethash "questions" rubric))
+                      (gethash "backend" rubric decisions-default-backend) (hash-table-count (gethash "questions" rubric))
                       (hash-table-count (gethash "controls" lint)))
               (mapconcat
                (pcase-lambda (`(,name . ,_))
@@ -875,7 +872,7 @@ given, receives the report text instead of a buffer."
                (cl-incf inflight)
                (condition-case err
                    (decisions-submit (decisions-review--lint-state question) (decisions--json-copy meta)
-                                :backend (gethash "backend" rubric "mlx")
+                                :backend (gethash "backend" rubric decisions-default-backend)
                                 :model (and (stringp model) model)
                                 :allow-truncation t
                                 :owner decisions-review--owner
@@ -1281,17 +1278,13 @@ NESTED rows sit under their file's row and are labelled by line only."
          (failed (seq-count (lambda (h) (eq (decisions-review--hunk-status h) 'failed)) hunks))
          (levels (mapcar (lambda (h) (decisions-review--level (decisions-review--hunk-risk h))) scored))
          (done (+ (length scored) failed))
-         (backend (gethash "backend" decisions-review--rubric "mlx")))
+         (backend (gethash "backend" decisions-review--rubric decisions-default-backend)))
     (erase-buffer)
     (insert (propertize "Decisions review" 'face '(:inherit bold :height 1.3))
             "  " (plist-get decisions-review--source :label)
             "  " (propertize (abbreviate-file-name (plist-get decisions-review--source :root)) 'face 'shadow) "\n")
     (insert (propertize (format "%s · %s · rubric %s\n" backend
-                                (gethash "model" decisions-review--rubric
-                                         (pcase backend
-                                           ("jev" decisions-jev-model)
-                                           ("laya" decisions-laya-model)
-                                           (_ decisions-mlx-model)))
+                                (gethash "model" decisions-review--rubric (decisions--model backend))
                                 (file-name-nondirectory decisions-review-rubric-file))
                         'face 'shadow))
     (insert (format "%d hunks · %d scored · " (length hunks) done)

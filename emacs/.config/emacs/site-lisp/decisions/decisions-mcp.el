@@ -20,7 +20,7 @@ Public `owner' or workspace fields in ARGUMENTS are ignored."
          (backend (gethash "backend" arguments missing)))
     (unless (or (eq backend missing)
                 (and (stringp backend) (member backend '("mlx" "laya" "jev"))))
-      (user-error "backend must be \"mlx\", \"laya\", or \"jev\"; omit it to use mlx"))
+      (user-error "backend must be \"mlx\", \"laya\", or \"jev\"; omit it to use `decisions-default-backend'"))
     (dolist (field '("model" "revision"))
       (let ((value (gethash field arguments missing)))
         (unless (or (eq value missing)
@@ -29,7 +29,7 @@ Public `owner' or workspace fields in ARGUMENTS are ignored."
     (let ((value (gethash "allow_truncation" arguments missing)))
       (unless (or (eq value missing) (eq value t) (eq value :false))
         (user-error "allow_truncation must be true or false")))
-    (when (and (equal backend "jev")
+    (when (and (equal (if (eq backend missing) decisions-default-backend backend) "jev")
                (not (eq (gethash "revision" arguments missing) missing)))
       (user-error "revision is only supported by the local MLX backend; use a Jev model ID"))))
 
@@ -46,7 +46,7 @@ Submitting returns a job ID promptly.  Call result later to retrieve answers."
            (user-error "state is required"))
          (let ((id (decisions-submit
                     (gethash "state" arguments) (gethash "questions" arguments)
-                    :backend (gethash "backend" arguments "mlx")
+                    :backend (gethash "backend" arguments decisions-default-backend)
                     :model (gethash "model" arguments)
                     :revision (gethash "revision" arguments)
                     :allow-truncation (eq (gethash "allow_truncation" arguments) t)

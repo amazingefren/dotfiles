@@ -7,7 +7,8 @@
 ;; Buffers that visit files or directories open in the most recently used
 ;; editing window: a tiled, undedicated window showing such a buffer.
 ;; Without one they open in the selected window, or a new one when the
-;; selected window is dedicated.  Buffers matching `dwm-view-buffers' get
+;; selected window is dedicated.  With `dwm-pick-window', a command that
+;; could use several tiled, undedicated windows asks which one.  Buffers matching `dwm-view-buffers' get
 ;; a new window dedicated to them.
 ;; Buffers matching `dwm-float-buffers' open in a floating child frame
 ;; that tiles on its own and closes on quit.
@@ -27,12 +28,37 @@
   "Condition, as for `buffer-match-p', for buffers shown in a floating frame."
   :type 'sexp)
 
+(defcustom dwm-pick-window t
+  "Non-nil: ask which window a file or directory opens in when several could take it.
+Only commands ask, and not from a floating frame or a minibuffer.  Timers,
+process output, `post-command-hook' and `dwm-pick-ignored-commands' take the
+most recently used editing window."
+  :type 'boolean)
+
+(defcustom dwm-pick-ignored-commands
+  '(compilation-display-error dired-display-file next-error-no-select occur-mode-display-occurrence
+    org-agenda-next-line org-agenda-previous-line org-agenda-show org-agenda-show-and-scroll-up
+    previous-error-no-select xref-next-group xref-next-line xref-prev-group xref-prev-line
+    xref-show-location-at-point)
+  "Commands that only preview a buffer, for which `dwm-pick-window' never asks."
+  :type '(repeat symbol))
+
+(defcustom dwm-pick-keys "asdfghjkl"
+  "Keys labelling windows for `dwm-pick-window', in window order."
+  :type 'string)
+
+(defface dwm-pick-label '((t :inherit isearch :weight bold :height 2.5))
+  "Label drawn on each window `dwm-pick-window' offers.")
+
 (defcustom dwm-view-buffers nil
   "Condition, as for `buffer-match-p', for buffers shown in a dedicated window."
   :type 'sexp)
 
 (defconst dwm--conditions '(dwm--editing-p dwm--float-p dwm--view-p)
   "The `display-buffer-alist' conditions that `dwm-mode' adds.")
+
+(defvar dwm--in-command nil
+  "Non-nil while `command-execute' runs a command.")
 
 (defconst dwm--float-frame-parameters
   '((auto-hide-function . dwm--delete-selected-float)
@@ -59,6 +85,7 @@
           (seq-remove (lambda (entry) (memq (car entry) dwm--conditions)) display-buffer-alist))
     (remove-hook 'window-configuration-change-hook #'dwm--arrange-selected-frame)
     (remove-hook 'delete-frame-functions #'dwm--focus-float-parent)
+    (advice-remove 'command-execute #'dwm--run-command)
     (when dwm-mode
       (push '(dwm--editing-p dwm-display-buffer-in-editing-window) display-buffer-alist)
       (push '(dwm--view-p dwm-display-buffer-in-view) display-buffer-alist)
@@ -66,6 +93,7 @@
       (setq base-functions (cons #'dwm-display-buffer base-functions))
       (add-hook 'window-configuration-change-hook #'dwm--arrange-selected-frame)
       (add-hook 'delete-frame-functions #'dwm--focus-float-parent)
+      (advice-add 'command-execute :around #'dwm--run-command)
       (dwm--arrange (selected-frame)))
     (setq display-buffer-base-action (cons base-functions (cdr display-buffer-base-action)))))
 
@@ -84,16 +112,19 @@ Close a selected floating frame first and use its parent.  Without an
 editing window, use the selected window unless it is dedicated or ALIST
 inhibits it, and else a new window.  Return the window, or nil when
 there is no room for one."
-  (when (frame-parameter nil 'dwm-float)
-    (let ((float (selected-frame)))
-      (select-frame-set-input-focus (frame-parent float))
-      (delete-frame float)))
-  (or (display-buffer-reuse-window buffer alist)
-      (dwm--display-in-editing-window buffer alist)
-      (and (dwm--free-window-p (selected-window))
-           (not (alist-get 'inhibit-same-window alist))
-           (window--display-buffer buffer (selected-window) 'reuse alist))
-      (dwm--display-in-new-window buffer alist)))
+  (let ((from-float (frame-parameter nil 'dwm-float)))
+    (when from-float
+      (let ((float (selected-frame)))
+        (select-frame-set-input-focus (frame-parent float))
+        (delete-frame float)))
+    ;; The float is gone by now, so a quit at the picker would show nothing.
+    (let ((dwm-pick-window (and dwm-pick-window (not from-float))))
+      (or (display-buffer-reuse-window buffer alist)
+          (dwm--display-in-editing-window buffer alist)
+          (and (dwm--free-window-p (selected-window))
+               (not (alist-get 'inhibit-same-window alist))
+               (window--display-buffer buffer (selected-window) 'reuse alist))
+          (dwm--display-in-new-window buffer alist)))))
 
 (defun dwm-display-buffer-in-float (buffer alist)
   "Show BUFFER in the selected frame's floating frame, per ALIST.
@@ -227,15 +258,61 @@ side window."
 
 (defun dwm--display-in-editing-window (buffer alist)
   "Show BUFFER in the selected frame's most recently used editing window.
-Skip the selected window when ALIST inhibits it.  Return the window, or
-nil when there is none."
-  (let* ((excluded (and (alist-get 'inhibit-same-window alist) (selected-window)))
-         (candidates (seq-filter (lambda (window)
-                                   (and (not (eq window excluded)) (dwm--editing-window-p window)))
-                                 (dwm--tiled-windows (selected-frame))))
-         (window (car (seq-sort-by #'window-use-time #'> candidates))))
+Skip the selected window when ALIST inhibits it.  When `dwm-pick-window'
+applies and several tiled, undedicated windows could take BUFFER, ask
+which.  Return the window, or nil when there is none."
+  (let* ((selected (selected-window))
+         (excluded (and (or (alist-get 'inhibit-same-window alist)
+                            (not (dwm--editing-window-p selected)))
+                        selected))
+         (free (seq-filter (lambda (window) (and (not (eq window excluded)) (dwm--free-window-p window)))
+                           (dwm--tiled-windows (selected-frame))))
+         (recent (car (seq-sort-by #'window-use-time #'>
+                                   (seq-filter #'dwm--editing-window-p free))))
+         (window (if (and (cdr free) (dwm--asking-p))
+                     (dwm--pick-window free (or recent (car free)))
+                   recent)))
     (when window
       (window--display-buffer buffer window 'reuse alist))))
+
+(defun dwm--asking-p ()
+  "Returns non-nil when a window choice may be asked of the user now."
+  (and dwm-pick-window dwm--in-command
+       ;; Timers and process output run with quitting inhibited.
+       (not inhibit-quit)
+       (not (memq this-command dwm-pick-ignored-commands))
+       (zerop (minibuffer-depth))))
+
+(defun dwm--pick-window (windows default)
+  "Labels WINDOWS with `dwm-pick-keys' and returns the one whose key is pressed.
+RET or SPC returns DEFAULT.  Windows beyond the available keys are not
+offered.  Signals `quit' on C-g or ESC."
+  (let* ((pairs (seq-mapn #'cons dwm-pick-keys windows))
+         (overlays (mapcar (lambda (pair) (dwm--pick-label (car pair) (cdr pair))) pairs))
+         (prompt (format "Open in window (%s, RET default): "
+                         (mapconcat (lambda (pair) (string (car pair))) pairs " ")))
+         choice)
+    (unwind-protect
+        (while (not choice)
+          (let ((key (read-key prompt)))
+            (cond ((memq key '(?\r ?\s return)) (setq choice default))
+                  ((memq key '(?\C-g ?\e escape)) (signal 'quit nil))
+                  (t (setq choice (alist-get key pairs))))))
+      (mapc #'delete-overlay overlays))
+    choice))
+
+(defun dwm--pick-label (key window)
+  "Draws KEY over the top of WINDOW and returns the overlay."
+  (with-current-buffer (window-buffer window)
+    (let ((overlay (make-overlay (window-start window) (window-start window))))
+      (overlay-put overlay 'window window)
+      (overlay-put overlay 'before-string (propertize (format " %c " key) 'face 'dwm-pick-label))
+      overlay)))
+
+(defun dwm--run-command (command-execute &rest args)
+  "Calls COMMAND-EXECUTE with ARGS while marking that a command runs."
+  (let ((dwm--in-command t))
+    (apply command-execute args)))
 
 (defun dwm--display-in-new-window (buffer alist)
   "Show BUFFER in a new tiled window that becomes the master, per ALIST.

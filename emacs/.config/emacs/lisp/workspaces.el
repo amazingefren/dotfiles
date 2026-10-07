@@ -24,6 +24,8 @@
     (transient--emergency-exit :workspace-switch)))
 (add-hook 'persp-before-switch-hook #'workspace-close-menus)
 
+(eval-when-compile (require 'consult))
+
 (with-eval-after-load 'consult
   (consult-customize consult-source-buffer :hidden t :default nil)
   (add-to-list 'consult-buffer-sources 'persp-consult-source))

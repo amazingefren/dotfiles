@@ -1,6 +1,5 @@
 {
   "format": "decisions-review-rubric-v1",
-  "backend": "mlx",
   "skip_files": "\\.\\(?:test\\|spec\\)\\.[cm]?[jt]sx?\\'\\|_test\\.\\(?:py\\|go\\|el\\)\\'\\|\\(?:\\`\\|/\\)tests?\\(?:-[a-z]+\\)?/\\|package-lock\\.json\\'\\|\\.lock\\'\\|\\.\\(?:png\\|jpe?g\\|gif\\|svg\\|pdf\\|ico\\)\\'\\|\\`\\.agents/context/",
   "questions": {
     "secret": {

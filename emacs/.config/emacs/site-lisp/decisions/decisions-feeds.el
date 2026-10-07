@@ -1,5 +1,6 @@
 ;;; decisions-feeds.el --- Ranked Elfeed recommendations -*- lexical-binding: t -*-
 
+(require 'ae-store)
 (require 'decisions)
 (require 'elfeed)
 (require 'elfeed-search)
@@ -11,6 +12,12 @@
   "Elfeed filter for a newly opened recommendation view."
   :group 'decisions
   :type 'string)
+
+(defcustom decisions-feeds-max-content-characters 12000
+  "Characters of an entry's text sent for ranking; the rest is dropped.
+Jev rejects requests of about 30,000 tokens."
+  :group 'decisions
+  :type 'natnum)
 
 (defconst decisions-feeds--questions
   (decisions--object
@@ -26,15 +33,20 @@
 
 (defvar-local decisions-feeds--entries nil)
 (defvar-local decisions-feeds--predictions nil)
-(defvar-local decisions-feeds--cache nil)
 (defvar-local decisions-feeds--pending nil)
-(defvar-local decisions-feeds--job nil)
+(defvar-local decisions-feeds--jobs nil)
+(defvar-local decisions-feeds--render-timer nil)
+(defvar decisions-feeds--update-timer nil
+  "Pending timer that adds newly fetched entries to open views.")
 (defvar-local decisions-feeds--generation nil)
 (defvar-local decisions-feeds--filter nil)
 
 (defun decisions-feeds--state (entry)
   "Returns plain-text classifier evidence for Elfeed ENTRY; signals content errors."
-  (decisions--object "content" (decisions-feeds--content entry)
+  (decisions--object "content" (let ((content (decisions-feeds--content entry)))
+                                 (if (> (length content) decisions-feeds-max-content-characters)
+                                     (substring content 0 decisions-feeds-max-content-characters)
+                                   content))
                      "feed" (elfeed-feed-title (elfeed-entry-feed entry))
                      "tags" (vconcat (mapcar #'symbol-name (elfeed-entry-tags entry)))
                      "title" (elfeed-entry-title entry)))
@@ -54,14 +66,16 @@
         (string-trim (buffer-substring-no-properties (point-min) (point-max)))))))
 
 (defun decisions-feeds--fingerprint (entry)
-  "Returns a cache key for ENTRY, criteria and model, excluding read status."
+  "Returns a cache key for ENTRY, criteria, backend, model and content limit, excluding read status."
   (secure-hash 'sha256
-               (prin1-to-string
-                (list decisions-mlx-model decisions-feeds--questions
+               (let ((print-length nil) (print-level nil))
+                 (prin1-to-string
+                (list decisions-default-backend (decisions--model decisions-default-backend)
+                      decisions-feeds-max-content-characters decisions-feeds--questions
                       (elfeed-entry-title entry)
                       (elfeed-feed-title (elfeed-entry-feed entry))
                       (remq 'unread (elfeed-entry-tags entry)) (elfeed-entry-content entry)
-                      (elfeed-entry-content-type entry)))))
+                      (elfeed-entry-content-type entry))))))
 
 (defun decisions-feeds--score (answer)
   "Return ANSWER's expected reading value or -1 for an incomplete entry."
@@ -154,7 +168,7 @@
           (format "Daily feeds %d/%d processed · %d failed · %d shown · %s · %s · s filter · C-c C-k stop"
                   finished (length ordered) failed visible-count (if (string-empty-p decisions-feeds--filter) "all" decisions-feeds--filter)
                   (cond ((not decisions-feeds--generation) "stopped")
-                        ((or decisions-feeds--pending decisions-feeds--job) "classifying")
+                        ((or decisions-feeds--pending decisions-feeds--jobs) "classifying")
                         (t "complete"))))
     (goto-char (point-min))
     (when-let* ((first-entry (text-property-not-all (point-min) (point-max) 'elfeed-entry nil)))
@@ -164,8 +178,9 @@
         (when position (goto-char position))))))
 
 (defun decisions-feeds--next ()
-  "Submit one pending entry while the ranking run is active."
-  (when (and decisions-feeds--generation (not decisions-feeds--job) decisions-feeds--pending)
+  "Submit pending entries while the ranking run is active, up to its concurrency."
+  (while (and decisions-feeds--generation decisions-feeds--pending
+              (< (length decisions-feeds--jobs) (decisions-feeds--concurrency)))
     (let* ((entry (pop decisions-feeds--pending))
            (entry-id (elfeed-entry-id entry))
            (source (current-buffer))
@@ -173,49 +188,69 @@
       (condition-case failure
           (let ((state (decisions-feeds--state entry))
                 (fingerprint (decisions-feeds--fingerprint entry)))
-            (setq decisions-feeds--job
-                  (decisions-submit
+            (push (decisions-submit
                    state
                    decisions-feeds--questions
                    :callback
                    (lambda (snapshot)
                      (when (buffer-live-p source)
                        (with-current-buffer source
-			 (when (eq generation decisions-feeds--generation)
-                           (setq decisions-feeds--job nil)
+                         (when (eq generation decisions-feeds--generation)
                            (let* ((result (gethash "result" snapshot))
                                   (answers (and (hash-table-p result) (gethash "answers" result)))
                                   (answer (and (hash-table-p answers) (gethash "reading" answers)))
                                   (failure (gethash "error" snapshot)))
-                             (if answer
-				 (progn
-                                   (puthash entry-id answer decisions-feeds--predictions)
-                                   (puthash entry-id (cons fingerprint answer) decisions-feeds--cache))
-                               (puthash entry-id
-					(decisions--object "error" (if (hash-table-p failure)
-                                                                       (gethash "message" failure)
-                                                                     (format "Job %s ended %s" (gethash "id" snapshot) (gethash "status" snapshot)))
-                                                           "status" "failed")
-					decisions-feeds--predictions)))
-                           (decisions-feeds--render)
-                           (run-at-time 0 nil (lambda ()
-						(when (buffer-live-p source)
-						  (with-current-buffer source
-                                                    (when (eq generation decisions-feeds--generation)
-                                                      (decisions-feeds--next)))))))))))))
+                             (setq decisions-feeds--jobs (delete (gethash "id" snapshot) decisions-feeds--jobs))
+                             (puthash entry-id
+                                      (or answer
+                                          (decisions--object "error" (if (hash-table-p failure)
+                                                                         (gethash "message" failure)
+                                                                       (format "Job %s ended %s" (gethash "id" snapshot) (gethash "status" snapshot)))
+                                                             "status" "failed"))
+                                      decisions-feeds--predictions)
+                             ;; A dispatch failure, such as a missing API key, repeats for every entry.
+                             (when (and (hash-table-p failure) (equal (gethash "code" failure) "dispatch"))
+                               (decisions-feeds-cancel))
+                             (decisions-feeds--render-soon)
+                             (run-at-time 0 nil (lambda ()
+                                                  (when (buffer-live-p source)
+                                                    (with-current-buffer source
+                                                      (when (eq generation decisions-feeds--generation)
+                                                        (decisions-feeds--next))))))
+                             ;; Last: a failed write must not stop the run.
+                             (when answer
+                               (ae-store-put "decisions-feeds" fingerprint answer))))))))
+                  decisions-feeds--jobs))
         (error
          (puthash entry-id (decisions--object "error" (error-message-string failure) "status" "failed")
                   decisions-feeds--predictions)
          (decisions-feeds-cancel)
          (decisions-feeds--render))))))
 
+(defun decisions-feeds--concurrency ()
+  "Returns how many entries a ranking run keeps in flight: `decisions-jev-concurrency' on Jev, else 1."
+  (if (equal decisions-default-backend "jev") (max 1 decisions-jev-concurrency) 1))
+
+(defun decisions-feeds--render-soon ()
+  "Renders now when ranking runs one entry at a time; otherwise at most once a second."
+  (if (= (decisions-feeds--concurrency) 1)
+      (decisions-feeds--render)
+    (unless decisions-feeds--render-timer
+      (let ((buffer (current-buffer)))
+        (setq decisions-feeds--render-timer
+              (run-at-time 1 nil (lambda ()
+                                   (when (buffer-live-p buffer)
+                                     (with-current-buffer buffer
+                                       (setq decisions-feeds--render-timer nil)
+                                       (decisions-feeds--render))))))))))
+
 (defun decisions-feeds-cancel ()
   "Stop pending classification and invalidate callbacks in this view."
   (interactive)
   (setq decisions-feeds--generation nil)
-  (when decisions-feeds--job
-    (decisions-cancel decisions-feeds--job)
-    (setq decisions-feeds--job nil))
+  (dolist (job decisions-feeds--jobs)
+    (decisions-cancel job))
+  (setq decisions-feeds--jobs nil)
   (dolist (entry decisions-feeds--entries)
     (let ((answer (gethash (elfeed-entry-id entry) decisions-feeds--predictions)))
       (when (equal (gethash "status" answer) "pending")
@@ -233,13 +268,46 @@
   (dolist (entry decisions-feeds--entries)
     (let* ((entry-id (elfeed-entry-id entry))
            (fingerprint (decisions-feeds--fingerprint entry))
-           (record (gethash entry-id decisions-feeds--cache))
-           (cached (and (equal fingerprint (car record)) (cdr record))))
+           (cached (ae-store-get "decisions-feeds" fingerprint)))
       (puthash entry-id (or cached (decisions--object "status" "pending")) decisions-feeds--predictions)
       (unless cached (push entry decisions-feeds--pending))))
   (setq decisions-feeds--pending (nreverse decisions-feeds--pending))
   (decisions-feeds--render)
   (decisions-feeds--next))
+
+(defun decisions-feeds--on-db-update ()
+  "Schedules adding newly fetched entries to open views, coalescing bursts of updates."
+  (unless decisions-feeds--update-timer
+    (setq decisions-feeds--update-timer
+          (run-at-time 2 nil (lambda ()
+                               (setq decisions-feeds--update-timer nil)
+                               (dolist (buffer (buffer-list))
+                                 (with-current-buffer buffer
+                                   (when (derived-mode-p 'decisions-feeds-mode)
+                                     (decisions-feeds--add-new-entries)))))))))
+
+(defun decisions-feeds--add-new-entries ()
+  "Adds entries matching this view's filter that it does not list yet.
+Uncached ones join the running classification, or show as stopped when it was stopped."
+  (let ((known (make-hash-table :test #'equal))
+        fresh)
+    (dolist (entry decisions-feeds--entries)
+      (puthash (elfeed-entry-id entry) t known))
+    (dolist (entry (elfeed-search-entries decisions-feeds--filter))
+      (unless (gethash (elfeed-entry-id entry) known)
+        (push entry fresh)))
+    (when fresh
+      (setq fresh (nreverse fresh)
+            decisions-feeds--entries (append decisions-feeds--entries fresh))
+      (dolist (entry fresh)
+        (let ((cached (ae-store-get "decisions-feeds" (decisions-feeds--fingerprint entry))))
+          (puthash (elfeed-entry-id entry)
+                   (or cached (decisions--object "status" (if decisions-feeds--generation "pending" "stopped")))
+                   decisions-feeds--predictions)
+          (when (and decisions-feeds--generation (not cached))
+            (setq decisions-feeds--pending (append decisions-feeds--pending (list entry))))))
+      (decisions-feeds--render-soon)
+      (decisions-feeds--next))))
 
 ;;;###autoload
 (defun decisions-feeds-rank ()
@@ -249,8 +317,7 @@
     (with-current-buffer view
       (unless (derived-mode-p 'decisions-feeds-mode)
         (decisions-feeds-mode)
-        (setq decisions-feeds--cache (make-hash-table :test #'equal)
-              decisions-feeds--filter decisions-feeds-default-filter))
+        (setq decisions-feeds--filter decisions-feeds-default-filter))
       (decisions-feeds-refresh))
     (pop-to-buffer view)))
 
@@ -279,23 +346,27 @@
 (defun decisions-feeds-show ()
   "Open the selected entry in native Elfeed and mark it read unless given a prefix."
   (interactive)
-  (let ((entry (decisions-feeds--selected)))
-    (unless current-prefix-arg (elfeed-untag entry 'unread))
-    (decisions-feeds--render)
-    (elfeed-show-entry entry)))
+  (elfeed-show-entry (decisions-feeds--mark-selected-read)))
 
 (defun decisions-feeds-browse ()
-  "Open the selected entry using the configured embedded feed browser."
+  "Open the selected entry in the embedded feed browser and mark it read unless given a prefix."
   (interactive)
-  (let ((url (elfeed-entry-link (decisions-feeds--selected))))
+  (let ((url (elfeed-entry-link (decisions-feeds--mark-selected-read))))
     (if (fboundp 'feeds-open-in-split) (feeds-open-in-split url) (browse-url url))))
 
 (defun decisions-feeds-browse-externally ()
-  "Open the selected entry using the configured external browser."
+  "Open the selected entry in the external browser and mark it read unless given a prefix."
   (interactive)
-  (let ((url (elfeed-entry-link (decisions-feeds--selected))))
+  (let ((url (elfeed-entry-link (decisions-feeds--mark-selected-read))))
     (if (fboundp 'browser-open-externally) (browser-open-externally url)
       (browse-url url t))))
+
+(defun decisions-feeds--mark-selected-read ()
+  "Marks the selected entry read unless a prefix argument is given, re-renders, and returns the entry."
+  (let ((entry (decisions-feeds--selected)))
+    (unless current-prefix-arg (elfeed-untag entry 'unread))
+    (decisions-feeds--render)
+    entry))
 
 (defun decisions-feeds-read ()
   "Mark the selected entry read through Elfeed's tag API."
@@ -342,6 +413,7 @@
   "Displays Elfeed entries by local publication day and expected reading value."
   (setq truncate-lines t)
   (hl-line-mode 1)
+  (add-hook 'elfeed-db-update-hook #'decisions-feeds--on-db-update)
   (add-hook 'kill-buffer-hook #'decisions-feeds-cancel nil t))
 
 (with-eval-after-load 'evil

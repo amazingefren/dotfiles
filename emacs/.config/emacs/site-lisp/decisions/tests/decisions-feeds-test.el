@@ -65,7 +65,7 @@
   (unless (< (point) (point-max)) (error "Entry missing: %s" (elfeed-entry-title entry))))
 
 (defmacro decisions-feeds-test--isolated (&rest body)
-  "Runs BODY with an isolated Elfeed database and captured decision submissions."
+  "Runs BODY with isolated Elfeed and prediction stores and captured decision submissions."
   (declare (indent 0))
   `(let ((elfeed-db '(:last-update 0))
          (elfeed-db-feeds (make-hash-table :test #'equal))
@@ -76,11 +76,13 @@
          (decisions--jobs (make-hash-table :test #'equal))
          (decisions--completed nil) (decisions--queue nil) (decisions--active nil)
          (decisions--serial 0) (decisions--process nil) (decisions--idle-timer nil)
-         (decisions-feeds-test--calls nil))
+         (decisions-feeds-test--calls nil)
+         (ae-store-file nil) (ae-store--db nil) (ae-store--db-file nil))
      (puthash "test-feed" (elfeed-feed--create :id "test-feed" :title "Test feed")
               elfeed-db-feeds)
      (cl-letf (((symbol-function 'decisions-submit) #'decisions-feeds-test--submit))
        (unwind-protect (progn ,@body)
+         (when ae-store--db (sqlite-close ae-store--db))
          (dolist (buffer (buffer-list))
            (when (with-current-buffer buffer
                    (or (derived-mode-p 'decisions-feeds-mode)
@@ -135,6 +137,66 @@
         (should (equal '(unread) (elfeed-entry-tags older)))
         (should (equal '(unread) (elfeed-entry-tags newer)))
         (should (equal '(star) (elfeed-entry-tags read)))))))
+
+(ert-deftest decisions-feeds-jev-keeps-concurrency-limit-in-flight ()
+  (decisions-feeds-test--isolated
+    (let ((decisions-default-backend "jev")
+          (decisions-jev-concurrency 3)
+          (entries (mapcar (lambda (index) (decisions-feeds-test--entry (format "item-%d" index) (* 100 index)))
+                           '(1 2 3 4 5))))
+      (with-current-buffer (decisions-feeds-test--open entries)
+        (should (= 3 (length decisions-feeds-test--calls)))
+        (should (= 3 (length decisions-feeds--jobs)))
+        (decisions-feeds-test--reply (nth 1 decisions-feeds-test--calls) "succeeded"
+                                     (decisions--object "read-now" 0.6 "save" 0.2 "skip" 0.2))
+        (decisions-feeds-test--wait-for-call 4)
+        (should (= 4 (length decisions-feeds-test--calls)))
+        (should (= 3 (length decisions-feeds--jobs)))
+        (should-not (member (car (nth 1 decisions-feeds-test--calls)) decisions-feeds--jobs))))))
+
+(ert-deftest decisions-feeds-browse-marks-read-unless-prefixed ()
+  (decisions-feeds-test--isolated
+    (let* ((kept (decisions-feeds-test--entry "kept" 100))
+           (opened (decisions-feeds-test--entry "opened" 200))
+           (urls nil))
+      (cl-letf (((symbol-function 'feeds-open-in-split) (lambda (url) (push url urls))))
+        (with-current-buffer (decisions-feeds-test--open (list kept opened))
+          (decisions-feeds-test--select opened)
+          (decisions-feeds-browse)
+          (decisions-feeds-test--select kept)
+          (let ((current-prefix-arg '(4))) (decisions-feeds-browse))
+          (should (equal urls '("https://example.test/kept" "https://example.test/opened")))
+          (should-not (memq 'unread (elfeed-entry-tags opened)))
+          (should (memq 'unread (elfeed-entry-tags kept))))))))
+
+(ert-deftest decisions-feeds-adds-entries-fetched-after-opening ()
+  (decisions-feeds-test--isolated
+    (let ((first (decisions-feeds-test--entry "first" 100))
+          (later (decisions-feeds-test--entry "later" 200)))
+      (with-current-buffer (decisions-feeds-test--open (list first))
+        (should (= 1 (length decisions-feeds-test--calls)))
+        (puthash (elfeed-entry-id later) later elfeed-db-entries)
+        (avl-tree-enter elfeed-db-index (elfeed-entry-id later))
+        (decisions-feeds--add-new-entries)
+        (should (memq later decisions-feeds--entries))
+        (decisions-feeds-test--reply (car decisions-feeds-test--calls) "succeeded"
+                                     (decisions--object "read-now" 0.6 "save" 0.2 "skip" 0.2))
+        (decisions-feeds-test--wait-for-call 2)
+        (should (equal (gethash "title" (nth 1 (nth 1 decisions-feeds-test--calls))) "later"))))))
+
+(ert-deftest decisions-feeds-dispatch-failure-stops-the-run ()
+  (decisions-feeds-test--isolated
+    (let ((entries (list (decisions-feeds-test--entry "a" 100) (decisions-feeds-test--entry "b" 200))))
+      (with-current-buffer (decisions-feeds-test--open entries)
+        (let* ((call (car decisions-feeds-test--calls))
+               (job (gethash (car call) decisions--jobs)))
+          (setf (decisions--job-status job) "failed")
+          (funcall (plist-get (nth 3 call) :callback)
+                   (decisions--object "id" (car call) "status" "failed" "result" :null
+                                      "error" (decisions--object "code" "dispatch" "message" "No TypeSafe API key configured"))))
+        (sleep-for 0.05)
+        (should (= 1 (length decisions-feeds-test--calls)))
+        (should-not decisions-feeds--generation)))))
 
 (ert-deftest decisions-feeds-incremental-ranking-keeps-selection-and-shows-errors ()
   (decisions-feeds-test--isolated
@@ -269,7 +331,7 @@
         (with-current-buffer (decisions-feeds-test--open entries)
           (sleep-for 0.01)
           (should (= 1 attempts))
-          (should-not decisions-feeds--job)
+          (should-not decisions-feeds--jobs)
           (should-not decisions-feeds--generation)
           (should (string-match-p "Unavailable test runtime" (buffer-string)))
           (should (string-match-p "stopped" (buffer-string))))))))
@@ -319,7 +381,7 @@
                  (lambda (_content) (error "Unreadable test content reference"))))
         (with-current-buffer (decisions-feeds-test--open entries)
           (should-not decisions-feeds-test--calls)
-          (should-not decisions-feeds--job)
+          (should-not decisions-feeds--jobs)
           (should-not decisions-feeds--generation)
           (should (string-match-p "Unreadable test content reference" (buffer-string)))
           (should (string-match-p "stopped" (buffer-string))))))))

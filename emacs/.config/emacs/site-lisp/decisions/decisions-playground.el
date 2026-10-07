@@ -40,7 +40,7 @@ When EDITABLE is non-nil, leave `q' available as text outside Evil states."
          (backend (gethash "backend" request missing)))
     (unless (or (eq backend missing)
                 (and (stringp backend) (member backend '("mlx" "laya" "jev"))))
-      (user-error "backend must be \"mlx\", \"laya\", or \"jev\"; omit it to use mlx"))
+      (user-error "backend must be \"mlx\", \"laya\", or \"jev\"; omit it to use `decisions-default-backend'"))
     (dolist (field '("model" "revision"))
       (let ((value (gethash field request missing)))
         (unless (or (eq value missing)
@@ -49,7 +49,7 @@ When EDITABLE is non-nil, leave `q' available as text outside Evil states."
     (let ((value (gethash "allow_truncation" request missing)))
       (unless (or (eq value missing) (eq value t) (eq value :false))
         (user-error "allow_truncation must be true or false")))
-    (when (and (equal backend "jev")
+    (when (and (equal (if (eq backend missing) decisions-default-backend backend) "jev")
                (not (eq (gethash "revision" request missing) missing)))
       (user-error "revision is only supported by the local MLX backend; use a Jev model ID"))))
 
@@ -119,7 +119,7 @@ An ID pruned from the retained job table is treated as completed."
     (when (eq state missing) (user-error "The request needs a state field"))
     (setq decisions-playground--job
           (decisions-submit state (gethash "questions" request)
-                       :backend (gethash "backend" request "mlx")
+                       :backend (gethash "backend" request decisions-default-backend)
                        :model (gethash "model" request)
                        :revision (gethash "revision" request)
                        :allow-truncation (eq (gethash "allow_truncation" request) t)

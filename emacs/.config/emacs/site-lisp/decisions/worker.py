@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Serial JSONL bridge for local decision models and explicitly selected Jev calls."""
+"""JSONL bridge for local decision models, run serially, and Jev calls, run concurrently."""
 
 import contextlib
 import gc
@@ -9,6 +9,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 import traceback
 from pathlib import Path
@@ -211,7 +212,8 @@ class ClefAgent:
 
 
 class Worker:
-    """Processes serial requests and retains one local model between calls."""
+    """Processes requests and retains one local model between calls.
+    Jev evaluations may run concurrently; everything else runs one at a time."""
     def __init__(self, *, loader=None, opener=None, sleeper=None):
         """Creates a worker with optional model, HTTP, and retry dependencies."""
         self.loader = loader
@@ -395,12 +397,26 @@ class Worker:
             return {"id": request_id, "ok": False, "error": {"code": "worker_error", "message": "Decision worker failed"}}
 
 
-def main():
-    """Reads JSONL requests and writes one response for each request."""
-    worker = Worker()
-    sys.stdout.write('{"event":"ready","protocol":1}\n')
-    sys.stdout.flush()
-    source = sys.stdin.buffer
+def _is_jev_evaluate(request):
+    """Returns whether REQUEST is a Jev evaluation."""
+    return (isinstance(request, dict) and request.get("backend") == "jev"
+            and request.get("op", "evaluate") == "evaluate")
+
+
+def serve(worker, source, out):
+    """Answers JSONL requests from SOURCE on OUT until SOURCE ends.
+    Jev evaluations run on their own threads; other requests run in order on
+    this one.  Each response is written whole under a lock."""
+    lock = threading.Lock()
+
+    def respond(response):
+        """Writes RESPONSE as one line unless it is None."""
+        if response is not None:
+            with lock:
+                out.write(_json(response) + "\n")
+                out.flush()
+
+    respond({"event": "ready", "protocol": 1})
     while True:
         line = source.readline(MAX_REQUEST_BYTES + 2)
         if not line:
@@ -408,17 +424,25 @@ def main():
         if len(line) > MAX_REQUEST_BYTES + 1:
             while line and not line.endswith(b"\n"):
                 line = source.readline(MAX_REQUEST_BYTES + 2)
-            response = {"id": None, "ok": False, "error": {"code": "request_too_large", "message": "Request exceeded 1 MiB"}}
+            respond({"id": None, "ok": False, "error": {"code": "request_too_large", "message": "Request exceeded 1 MiB"}})
+            continue
+        try:
+            request = json.loads(line, parse_constant=_finite_constant)
+        except (ValueError, UnicodeError):
+            respond({"id": None, "ok": False, "error": {"code": "invalid_json", "message": "Malformed JSON request"}})
+            continue
+        if _is_jev_evaluate(request):
+            threading.Thread(target=lambda request=request: respond(worker.handle(request)), daemon=True).start()
         else:
-            try:
-                request = json.loads(line, parse_constant=_finite_constant)
-                with contextlib.redirect_stdout(sys.stderr):
-                    response = worker.handle(request)
-            except (ValueError, UnicodeError):
-                response = {"id": None, "ok": False, "error": {"code": "invalid_json", "message": "Malformed JSON request"}}
-        if response is not None:
-            sys.stdout.write(_json(response) + "\n")
-            sys.stdout.flush()
+            # Responses go to OUT, never sys.stdout, which this swaps.
+            with contextlib.redirect_stdout(sys.stderr):
+                response = worker.handle(request)
+            respond(response)
+
+
+def main():
+    """Reads JSONL requests from stdin and writes one response for each request to stdout."""
+    serve(Worker(), sys.stdin.buffer, sys.stdout)
 
 
 if __name__ == "__main__":
